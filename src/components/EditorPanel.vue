@@ -1,13 +1,8 @@
 <template>
   <div class="h-full w-full">
-    <vue-monaco-editor
-      v-model:value="editorStore.content"
-      :language="editorStore.language"
-      :options="editorOptions"
-      @mount="handleEditorMount"
-      @change="handleContentChange"
-      class="h-full"
-    />
+    <vue-monaco-editor v-model:value="editorStore.content" :language="editorStore.language" :options="editorOptions"
+      @mount="handleEditorMount" @change="handleContentChange" class="h-full" />
+
   </div>
 </template>
 
@@ -49,10 +44,10 @@ const editorOptions = {
 
 const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
-  
+
   // Add custom keyboard shortcuts
   editor.addCommand(
-    editor.getModel()?.getLanguageId() === 'python' 
+    editor.getModel()?.getLanguageId() === 'python'
       ? monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR
       : 0,
     () => {
@@ -60,7 +55,7 @@ const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
       runCode()
     }
   )
-  
+
   editor.addCommand(
     monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyU,
     () => {
@@ -68,7 +63,7 @@ const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
       uploadCode()
     }
   )
-  
+
   // Focus the editor
   editor.focus()
 }
@@ -82,7 +77,7 @@ const runCode = async () => {
     console.warn('No serial connection available')
     return
   }
-  
+
   await serialStore.uploadCode(editorStore.content, true)
   editorStore.saveFile()
 }
@@ -92,7 +87,7 @@ const uploadCode = async () => {
     console.warn('No serial connection available')
     return
   }
-  
+
   await serialStore.uploadCode(editorStore.content, false)
   editorStore.saveFile()
 }

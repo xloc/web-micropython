@@ -2,18 +2,15 @@
   <div class="h-screen flex flex-col bg-gray-50">
     <!-- Tab bar -->
     <TabBar />
-    
+
     <!-- Main content area -->
     <div class="flex-1 overflow-hidden">
-      <SplitPane
-        :orientation="uiStore.splitOrientation"
-        :split-ratio="uiStore.splitRatio"
-        @update="uiStore.updateSplitRatio"
-      >
+      <SplitPane :orientation="uiStore.splitOrientation" :split-ratio="uiStore.splitRatio"
+        @update="uiStore.updateSplitRatio">
         <template #first>
           <EditorPanel />
         </template>
-        
+
         <template #second>
           <ConsolePanel v-if="uiStore.isConsoleVisible" />
         </template>
