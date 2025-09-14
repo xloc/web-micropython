@@ -5,15 +5,12 @@
       <slot name="first" />
     </div>
 
-    <!-- Vertical resize handle -->
-    <div v-if="orientation === 'vertical'"
-      class="flex-shrink-0 w-[11px] -mx-[5px] border-l-[5px] border-r-[5px] border-transparent bg-transparent hover:bg-blue-500/50 transition-all duration-200 cursor-col-resize z-10"
-      @mousedown="startResize" />
-
-    <!-- Horizontal resize handle -->
-    <div v-else
-      class="flex-shrink-0 h-[11px] -my-[5px] border-t-[5px] border-b-[5px] border-transparent bg-transparent hover:bg-blue-500/50 transition-all duration-200 cursor-row-resize z-10"
-      @mousedown="startResize" />
+    <div
+      class="flex-none border-transparent bg-clip-padding bg-zinc-500 hover:bg-blue-500 hover:border-blue-500/50 transition-all duration-200 z-10"
+      :class="{
+        'w-[11px] -mx-[5px] border-x-[5px] cursor-col-resize': orientation === 'vertical',
+        'h-[11px] -my-[5px] border-y-[5px] cursor-row-resize': orientation === 'horizontal'
+      }" @mousedown="startResize" />
 
     <!-- Second panel -->
     <div class="overflow-hidden flex-1">

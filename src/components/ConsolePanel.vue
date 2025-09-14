@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full w-full bg-black relative">
+  <div class="h-full w-full bg-black relative p-2 bg-zinc-900">
     <div ref="terminalRef" class="h-full w-full" />
 
     <!-- Connection status overlay -->
@@ -44,13 +44,12 @@ onMounted(async () => {
   // Create terminal instance
   terminal = new Terminal({
     theme: {
-      background: '#000000',
-      foreground: '#ffffff',
-      cursor: '#ffffff'
+      background: 'oklch(21% 0.006 285.885)',
+      foreground: 'oklch(92% 0.004 286.32)',
+      cursor: '#ffffff',
     },
     fontSize: 14,
     fontFamily: 'Monaco, "Cascadia Code", "Roboto Mono", monospace',
-    cursorBlink: true
   })
 
   // Setup fit addon
@@ -137,3 +136,10 @@ onUnmounted(() => {
   resizeObserver.disconnect()
 })
 </script>
+
+<style>
+.xterm .xterm-viewport {
+  scrollbar-color: oklch(70.5% 0.015 286.067) transparent;
+  scrollbar-width: thin;
+}
+</style>
