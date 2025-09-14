@@ -10,11 +10,13 @@
 import { ref, onMounted } from 'vue'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
+import { usePyodideStore } from '../stores/pyodide'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 
 const editorStore = useEditorStore()
 const serialStore = useSerialStore()
+const pyodideStore = usePyodideStore()
 
 const editorInstance = ref<editor.IStandaloneCodeEditor | null>(null)
 
@@ -42,34 +44,36 @@ const editorOptions = {
   insertSpaces: true
 }
 
-const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
+const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
+  pyodideStore.editor = editor
+
+  // Log editor info for debugging
+  const model = editor.getModel()
+  console.log('Editor mounted with model:', {
+    languageId: model?.getLanguageId(),
+    uri: model?.uri.toString(),
+    content: model?.getValue()
+  })
+
+  // Store-based language service registration happens automatically
+  console.log('✅ Editor mounted, language features will be registered automatically')
 
   // Add custom keyboard shortcuts
-  editor.addCommand(
-    editor.getModel()?.getLanguageId() === 'python'
-      ? monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR
-      : 0,
-    () => {
-      // Run code (upload and execute)
-      runCode()
-    }
-  )
-
-  editor.addCommand(
-    monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyU,
-    () => {
-      // Upload code only
-      uploadCode()
-    }
-  )
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyR, runCode)
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyU, uploadCode)
 
   // Focus the editor
   editor.focus()
 }
 
-const handleContentChange = () => {
+const handleContentChange = async () => {
   editorStore.updateContent(editorStore.content)
+
+  // Sync content to Pyodide file system
+  if (pyodideStore.pyodide && pyodideStore.editingFilePath) {
+    await pyodideStore.pyodide.writeFile(pyodideStore.editingFilePath, editorStore.content)
+  }
 }
 
 const runCode = async () => {
@@ -92,10 +96,15 @@ const uploadCode = async () => {
   editorStore.saveFile()
 }
 
-// Set initial content if empty
+// Set initial content if empty and set initial file path for Pyodide
 onMounted(() => {
   if (!editorStore.content) {
-    editorStore.updateContent('# MicroPython code\nprint("Hello, World!")')
+    editorStore.updateContent('s = "hello"\ns.')
+  }
+  // Set initial file path for the Pyodide store
+  if (!pyodideStore.editingFilePath) {
+    pyodideStore.editingFilePath = '/mnt/main.py'
   }
 })
+
 </script>
