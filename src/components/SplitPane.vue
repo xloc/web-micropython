@@ -5,8 +5,14 @@
       <slot name="first" />
     </div>
 
-    <!-- Resize handle -->
-    <div class="flex-shrink-0 bg-gray-300 hover:bg-gray-400 cursor-col-resize transition-colors" :class="handleClass"
+    <!-- Vertical resize handle -->
+    <div v-if="orientation === 'vertical'"
+      class="flex-shrink-0 w-[11px] -mx-[5px] border-l-[5px] border-r-[5px] border-transparent bg-transparent hover:bg-blue-500/50 transition-all duration-200 cursor-col-resize z-10"
+      @mousedown="startResize" />
+
+    <!-- Horizontal resize handle -->
+    <div v-else
+      class="flex-shrink-0 h-[11px] -my-[5px] border-t-[5px] border-b-[5px] border-transparent bg-transparent hover:bg-blue-500/50 transition-all duration-200 cursor-row-resize z-10"
       @mousedown="startResize" />
 
     <!-- Second panel -->
@@ -34,12 +40,6 @@ const emit = defineEmits<{
 }>()
 
 const isResizing = ref(false)
-
-const handleClass = computed(() =>
-  props.orientation === 'vertical'
-    ? 'w-1 cursor-col-resize'
-    : 'h-1 cursor-row-resize'
-)
 
 const firstPanelStyle = computed(() => {
   const size = props.splitRatio * 100
