@@ -1,7 +1,7 @@
 import { useMonaco } from '@guolao/vue-monaco-editor';
 import { useLocalStorage } from '@vueuse/core';
 import dedent from 'dedent';
-import { editor, Uri } from 'monaco-editor';
+import { editor } from 'monaco-editor';
 import { defineStore } from 'pinia';
 import { nextTick, onMounted, shallowRef, watch } from 'vue';
 import * as Comlink from 'comlink';
@@ -64,27 +64,6 @@ export const usePyodideStore = defineStore('pyodide', () => {
             console.error('❌ Failed to initialize Pyodide worker:', error);
         }
     })
-
-    // Automatically handle file loading when editor, monaco, path, or pyodide changes
-    watch(
-        () => [editorRef.value, monacoRef.value, editingFilePath.value, pyodideRef.value] as const,
-        async ([editor, monaco, path, pyodide]) => {
-            if (!editor || !monaco || !path || !pyodide) return;
-
-            const existingModel = monaco.editor.getModel(Uri.parse(path));
-            if (existingModel) {
-                editor.setModel(existingModel);
-            } else {
-                const text = await pyodide.readFile(path);
-                if (!text) {
-                    console.error('Failed to read file', path);
-                    return;
-                }
-                const model = monaco.editor.createModel(text, 'python', Uri.parse(path));
-                editor.setModel(model);
-            }
-        }
-    );
 
     // Automatically register language features when both Monaco and Pyodide are ready
     const stopRegisterLang = watch(

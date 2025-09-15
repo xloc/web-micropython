@@ -25,6 +25,14 @@ export interface Signature {
     params: ParamName[];
 }
 
+export interface FileSystemEntry {
+    name: string;
+    path: string;
+    type: 'file' | 'directory';
+    size: number;
+    lastModified: number;
+}
+
 export interface PyodideWorkerAPI {
     init(): Promise<void>;
 
@@ -60,7 +68,17 @@ export interface PyodideWorkerAPI {
     writeFile(filePath: string, content: string): void;
     readFile(filePath: string): string | null;
 
-    ls(path: string): string[]
+    ls(path: string): string[];
+
+    // File system operations
+    createDirectory(path: string): Promise<void>;
+    deleteFile(path: string): Promise<void>;
+    deleteDirectory(path: string): Promise<void>;
+    renameEntry(oldPath: string, newPath: string): Promise<void>;
+    readDirectory(path: string): Promise<FileSystemEntry[]>;
+    getFileTree(rootPath: string): Promise<FileSystemEntry>;
+    exists(path: string): Promise<boolean>;
+    isDirectory(path: string): Promise<boolean>;
 }
 
 export type RemotePyodideWorkerAPI = Comlink.Remote<PyodideWorkerAPI>

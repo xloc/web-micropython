@@ -1,7 +1,7 @@
 import dedent from "dedent";
 import { loadPyodide, type PyodideInterface } from "pyodide";
 import * as Comlink from "comlink";
-import type { Completion, PyodideWorkerAPI, Signature, Name } from "./pyodide.types";
+import type { Completion, PyodideWorkerAPI, Signature, Name, FileSystemEntry } from "./pyodide.types";
 
 class PyodideWorkerAPIImpl implements PyodideWorkerAPI {
     pyodide!: PyodideInterface;
@@ -147,6 +147,113 @@ class PyodideWorkerAPIImpl implements PyodideWorkerAPI {
     ls(path: string): string[] {
         const files = this.pyodide.FS.readdir(path);
         return files.filter(file => file !== '.' && file !== '..');
+    }
+
+    async createDirectory(path: string): Promise<void> {
+        try {
+            (this.pyodide.FS as any).mkdir(path);
+        } catch (e: any) {
+            if (e.errno !== 20) { // Ignore "already exists" error
+                throw new Error(`Failed to create directory: ${e.message}`);
+            }
+        }
+    }
+
+    async deleteFile(path: string): Promise<void> {
+        try {
+            this.pyodide.FS.unlink(path);
+        } catch (e: any) {
+            throw new Error(`Failed to delete file: ${e.message}`);
+        }
+    }
+
+    async deleteDirectory(path: string): Promise<void> {
+        try {
+            this.pyodide.FS.rmdir(path);
+        } catch (e: any) {
+            throw new Error(`Failed to delete directory: ${e.message}`);
+        }
+    }
+
+    async renameEntry(oldPath: string, newPath: string): Promise<void> {
+        try {
+            (this.pyodide.FS as any).rename(oldPath, newPath);
+        } catch (e: any) {
+            throw new Error(`Failed to rename: ${e.message}`);
+        }
+    }
+
+    async readDirectory(path: string): Promise<FileSystemEntry[]> {
+        try {
+            const entries = this.pyodide.FS.readdir(path)
+                .filter(name => name !== '.' && name !== '..');
+
+            return entries.map(name => {
+                const fullPath = `${path}/${name}`;
+                const stat = this.pyodide.FS.stat(fullPath);
+
+                return {
+                    name,
+                    path: fullPath,
+                    type: this.pyodide.FS.isDir(stat.mode) ? 'directory' : 'file',
+                    size: stat.size,
+                    lastModified: stat.mtime
+                };
+            });
+        } catch (e: any) {
+            throw new Error(`Failed to read directory: ${e.message}`);
+        }
+    }
+
+    async getFileTree(rootPath: string): Promise<FileSystemEntry> {
+        const buildTree = async (path: string, depth: number): Promise<FileSystemEntry> => {
+            const stat = this.pyodide.FS.stat(path);
+            const entry: FileSystemEntry & { children?: FileSystemEntry[] } = {
+                name: path.split('/').pop() || '',
+                path,
+                type: this.pyodide.FS.isDir(stat.mode) ? 'directory' : 'file',
+                size: stat.size,
+                lastModified: stat.mtime
+            };
+
+            if (entry.type === 'directory' && depth < 10) { // Max depth to prevent infinite recursion
+                try {
+                    const children = await this.readDirectory(path);
+                    entry.children = await Promise.all(
+                        children.map(child => buildTree(child.path, depth + 1))
+                    );
+                } catch (e) {
+                    // If we can't read directory, just leave it without children
+                    entry.children = [];
+                }
+            }
+
+            return entry;
+        };
+
+        try {
+            return await buildTree(rootPath, 0);
+        } catch (e: any) {
+            throw new Error(`Failed to get file tree: ${e.message}`);
+        }
+    }
+
+    async exists(path: string): Promise<boolean> {
+        try {
+            this.pyodide.FS.stat(path);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async isDirectory(path: string): Promise<boolean> {
+        try {
+            const stat = this.pyodide.FS.stat(path);
+            return this.pyodide.FS.isDir(stat.mode);
+        } catch (e) {
+            return false;
+        }
     }
 }
 

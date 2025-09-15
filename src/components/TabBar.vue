@@ -1,10 +1,33 @@
 <template>
   <div class="flex items-center justify-between bg-zinc-800 pr-4 h-10">
-    <!-- File tab -->
-    <div class="flex items-center space-x-4 text-zinc-300 h-full">
-      <div class="flex items-center px-3 py-1 bg-zinc-700 h-full">
-        <span class="text-sm font-medium pr-2">{{ editorStore.filename }}</span>
-        <span v-if="editorStore.isDirty" class="ml-1 w-2 h-2 bg-orange-400 rounded-full" title="Unsaved changes" />
+    <!-- File tabs -->
+    <div class="flex items-center h-full overflow-x-auto">
+      <div
+        v-for="file in fileSystemStore.openFilesList"
+        :key="file.path"
+        :class="[
+          'flex items-center px-3 py-1 h-full border-r border-zinc-600 cursor-pointer hover:bg-zinc-600 transition-colors',
+          {
+            'bg-zinc-700': fileSystemStore.activeFilePath === file.path,
+            'bg-zinc-800': fileSystemStore.activeFilePath !== file.path
+          }
+        ]"
+        @click="switchToFile(file.path)"
+      >
+        <span class="text-sm font-medium pr-2 text-zinc-300">{{ getFileName(file.path) }}</span>
+        <span v-if="file.isDirty" class="w-2 h-2 bg-orange-400 rounded-full" title="Unsaved changes" />
+        <button
+          @click.stop="closeFile(file.path)"
+          class="ml-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 rounded p-0.5"
+          title="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Show message if no files open -->
+      <div v-if="fileSystemStore.openFilesList.length === 0" class="px-3 py-1 text-zinc-500 text-sm">
+        No files open
       </div>
     </div>
 
@@ -46,27 +69,46 @@
 
 <script setup lang="ts">
 import { ArrowUpTrayIcon, PlayIcon, ViewColumnsIcon, Bars3Icon, LinkIcon } from '@heroicons/vue/20/solid'
-import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
 import { useUIStore } from '../stores/ui'
+import { useFileSystemStore } from '../stores/fileSystem'
 
-const editorStore = useEditorStore()
 const serialStore = useSerialStore()
 const uiStore = useUIStore()
+const fileSystemStore = useFileSystemStore()
 
+
+const switchToFile = (path: string) => {
+  fileSystemStore.activeFilePath = path
+}
+
+const closeFile = (path: string) => {
+  fileSystemStore.closeFile(path)
+}
+
+const getFileName = (path: string): string => {
+  const parts = path.split('/')
+  return parts[parts.length - 1] || ''
+}
 
 const runCode = async () => {
   if (!serialStore.isConnected) return
 
-  await serialStore.uploadCode(editorStore.content, true)
-  editorStore.saveFile()
+  const activeFile = fileSystemStore.activeFile
+  if (!activeFile) return
+
+  await serialStore.uploadCode(activeFile.content, true)
+  await fileSystemStore.saveFile(activeFile.path)
 }
 
 const uploadCode = async () => {
   if (!serialStore.isConnected) return
 
-  await serialStore.uploadCode(editorStore.content, false)
-  editorStore.saveFile()
+  const activeFile = fileSystemStore.activeFile
+  if (!activeFile) return
+
+  await serialStore.uploadCode(activeFile.content, false)
+  await fileSystemStore.saveFile(activeFile.path)
 }
 
 const toggleOrientation = () => {

@@ -11,6 +11,9 @@ export const useSerialStore = defineStore('serial', () => {
   
   // Callback for handling received data
   let onDataReceived: ((data: string) => void) | null = null
+
+  // Keep track of the reader for proper cleanup
+  let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null
   
   // Actions
   const connect = async () => {
@@ -62,7 +65,23 @@ export const useSerialStore = defineStore('serial', () => {
   
   const disconnect = async () => {
     if (port.value) {
-      await port.value.close()
+      // Cancel the reader first if it exists
+      if (currentReader) {
+        try {
+          await currentReader.cancel()
+          currentReader = null
+        } catch (error) {
+          console.warn('Error canceling reader:', error)
+        }
+      }
+
+      // Close the port
+      try {
+        await port.value.close()
+      } catch (error) {
+        console.warn('Error closing port:', error)
+      }
+
       port.value = null
       isConnected.value = false
     }
@@ -123,33 +142,35 @@ export const useSerialStore = defineStore('serial', () => {
     if (!port.value) {
       return
     }
-    
+
     if (!port.value.readable) {
       return
     }
-    
+
     const reader = port.value.readable.getReader()
-    
+    currentReader = reader
+
     try {
       while (true) {
         const { value, done } = await reader.read()
-        
+
         if (done) {
           break
         }
-        
+
         if (!value) {
           continue
         }
-        
+
         const text = new TextDecoder().decode(value)
         if (onDataReceived) {
           onDataReceived(text)
         }
       }
     } catch (error) {
-      console.error('❌ Reading error:', error)
-      if (error instanceof Error) {
+      // Don't log cancellation errors as they're expected during disconnect
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('❌ Reading error:', error)
         console.error('❌ Error details:', {
           name: error.name,
           message: error.message,
@@ -157,6 +178,9 @@ export const useSerialStore = defineStore('serial', () => {
         })
       }
     } finally {
+      if (currentReader === reader) {
+        currentReader = null
+      }
       reader.releaseLock()
     }
   }

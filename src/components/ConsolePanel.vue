@@ -1,22 +1,43 @@
 <template>
-  <div class="h-full w-full bg-black relative p-2 bg-zinc-900">
-    <div ref="terminalRef" class="h-full w-full" />
+  <div class="h-full w-full flex flex-col bg-zinc-900">
+    <!-- Tab bar -->
+    <div class="flex items-center justify-between bg-zinc-800 pr-4 h-10">
+      <div class="flex items-center h-full">
+        <div class="flex items-center px-3 py-1 h-full">
+          <span class="text-sm font-medium text-zinc-300">Console</span>
+        </div>
+      </div>
 
-    <!-- Connection status overlay -->
-    <div v-if="!serialStore.isConnected" class="absolute inset-0 bg-black/80 flex items-center justify-center">
-      <div class="text-white text-center">
-        <div class="text-lg mb-2">No Serial Connection</div>
-        <button @click="serialStore.connect"
-          class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-          Connect Device
+      <!-- Console action buttons -->
+      <div class="flex items-center space-x-2">
+        <!-- Disconnect button -->
+        <button v-if="serialStore.isConnected" @click="serialStore.disconnect"
+          class="p-1 hover:bg-white/20 text-red-400 rounded transition-colors" title="Disconnect">
+          ⏹️
         </button>
       </div>
     </div>
 
-    <!-- Upload indicator -->
-    <div v-if="serialStore.isUploading"
-      class="absolute top-2 right-2 bg-yellow-600 text-white px-3 py-1 rounded text-sm">
-      Uploading...
+    <!-- Terminal content -->
+    <div class="flex-1 relative p-2">
+      <div ref="terminalRef" class="h-full w-full" />
+
+      <!-- Connection status overlay -->
+      <div v-if="!serialStore.isConnected" class="absolute inset-0 bg-black/80 flex items-center justify-center">
+        <div class="text-white text-center">
+          <div class="text-lg mb-2">No Serial Connection</div>
+          <button @click="serialStore.connect"
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+            Connect Device
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload indicator -->
+      <div v-if="serialStore.isUploading"
+        class="absolute top-2 right-2 bg-yellow-600 text-white px-3 py-1 rounded text-sm">
+        Uploading...
+      </div>
     </div>
   </div>
 </template>
@@ -32,6 +53,31 @@ const terminalRef = ref<HTMLElement>()
 
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
+
+// Handle window resize
+const handleResize = () => {
+  if (fitAddon) {
+    setTimeout(() => fitAddon!.fit(), 100)
+  }
+}
+
+// Auto-fit terminal when panel is resized
+const resizeObserver = new ResizeObserver(() => {
+  if (fitAddon) {
+    setTimeout(() => fitAddon!.fit(), 50)
+  }
+})
+
+// Register cleanup before any async operations
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  resizeObserver.disconnect()
+  // Clear the callback to avoid memory leaks
+  serialStore.setDataCallback(() => { })
+  if (terminal) {
+    terminal.dispose()
+  }
+})
 
 onMounted(async () => {
   await nextTick()
@@ -86,26 +132,13 @@ onMounted(async () => {
     }
   })
 
-  // Handle window resize
-  const handleResize = () => {
-    if (fitAddon) {
-      setTimeout(() => fitAddon!.fit(), 100)
-    }
-  }
-
   window.addEventListener('resize', handleResize)
 
-  // Cleanup in onUnmounted
-  onUnmounted(() => {
-    window.removeEventListener('resize', handleResize)
-    // Clear the callback to avoid memory leaks
-    serialStore.setDataCallback(() => { })
-    if (terminal) {
-      terminal.dispose()
-    }
-  })
+  // Set up resize observer
+  if (terminalRef.value) {
+    resizeObserver.observe(terminalRef.value)
+  }
 })
-
 
 // Watch user input enabled state for visual feedback
 watch(() => serialStore.userInputEnabled, (enabled) => {
@@ -117,23 +150,6 @@ watch(() => serialStore.userInputEnabled, (enabled) => {
   if (!enabled) {
     terminal.write('\r\n[Input disabled during upload]\r\n')
   }
-})
-
-// Auto-fit terminal when panel is resized
-const resizeObserver = new ResizeObserver(() => {
-  if (fitAddon) {
-    setTimeout(() => fitAddon!.fit(), 50)
-  }
-})
-
-onMounted(() => {
-  if (terminalRef.value) {
-    resizeObserver.observe(terminalRef.value)
-  }
-})
-
-onUnmounted(() => {
-  resizeObserver.disconnect()
 })
 </script>
 
