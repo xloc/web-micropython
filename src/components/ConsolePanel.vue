@@ -13,7 +13,7 @@
         <!-- Disconnect button -->
         <button v-if="serialStore.isConnected" @click="serialStore.disconnect"
           class="p-1 hover:bg-white/20 rounded transition-colors" title="Disconnect">
-          <PowerIcon class="size-4 text-red-400" />
+          <LinkSlashIcon class="size-4 text-red-400" />
         </button>
       </div>
     </div>
@@ -23,9 +23,8 @@
       <div ref="terminalRef" class="h-full w-full" />
 
       <!-- Connection status overlay -->
-      <div v-if="!serialStore.isConnected"
-           @click="serialStore.connect"
-           class="absolute inset-0 bg-black/80 flex items-center justify-center cursor-pointer hover:bg-black/70 transition-colors">
+      <div v-if="!serialStore.isConnected" @click="serialStore.connect"
+        class="absolute inset-0 bg-black/80 flex items-center justify-center cursor-pointer hover:bg-black/70 transition-colors">
         <div class="text-white text-center pointer-events-none">
           <div class="text-lg mb-2">No Serial Connection</div>
           <div class="text-sm text-gray-300">Click to connect device</div>
@@ -45,7 +44,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { PowerIcon } from '@heroicons/vue/20/solid'
+import { LinkSlashIcon } from '@heroicons/vue/20/solid'
 import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
