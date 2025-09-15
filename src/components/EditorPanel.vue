@@ -42,14 +42,20 @@
         <button @click="uploadCode" :disabled="!serialStore.isConnected || serialStore.isUploading"
           class="p-1 hover:bg-white/20 text-zinc-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title="Upload Code">
-          <ArrowUpTrayIcon class="w-4 h-4" />
+          <ArrowUpTrayIcon class="size-4" />
         </button>
 
         <!-- Run button -->
         <button @click="runCode" :disabled="!serialStore.isConnected || serialStore.isUploading"
           class="p-1 hover:bg-white/20 text-green-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           :title="serialStore.isUploading ? 'Running...' : 'Run Code'">
-          <PlayIcon class="w-4 h-4" />
+          <PlayIcon class="size-4" />
+        </button>
+
+        <!-- Console toggle -->
+        <button @click="uiStore.toggleConsole" class="p-1 hover:bg-white/20 text-zinc-400 rounded transition-colors"
+          :title="uiStore.isConsoleVisible ? 'Hide Console' : 'Show Console'">
+          <CommandLineIcon class="size-4" />
         </button>
       </div>
     </div>
@@ -71,11 +77,12 @@
 
 <script setup lang="ts">
 import { onMounted, watch, shallowRef } from 'vue'
-import { ArrowUpTrayIcon, PlayIcon, LinkIcon } from '@heroicons/vue/20/solid'
+import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
 import { usePyodideStore } from '../stores/pyodide'
 import { useFileSystemStore } from '../stores/fileSystem'
+import { useUIStore } from '../stores/ui'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 
@@ -83,6 +90,7 @@ const editorStore = useEditorStore()
 const serialStore = useSerialStore()
 const pyodideStore = usePyodideStore()
 const fileSystemStore = useFileSystemStore()
+const uiStore = useUIStore()
 
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
 
@@ -232,11 +240,14 @@ onMounted(async () => {
 <style scoped>
 .hide-scrollbar {
   /* Hide scrollbar for Webkit browsers */
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }
 
 .hide-scrollbar::-webkit-scrollbar {
-  display: none;  /* Webkit browsers */
+  display: none;
+  /* Webkit browsers */
 }
 </style>

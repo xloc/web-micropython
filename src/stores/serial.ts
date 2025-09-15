@@ -9,8 +9,9 @@ export const useSerialStore = defineStore('serial', () => {
   const isRawMode = ref(false)
   const userInputEnabled = ref(true)
   
-  // Callback for handling received data
+  // Callbacks for handling data
   let onDataReceived: ((data: string) => void) | null = null
+  let onInfoMessage: ((message: string) => void) | null = null
 
   // Keep track of the reader for proper cleanup
   let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -48,12 +49,15 @@ export const useSerialStore = defineStore('serial', () => {
         throw new Error('Port writable stream not available')
       }
       const writer = port.value.writable.getWriter()
+
+      if (onInfoMessage) onInfoMessage('Send Ctrl-c Ctrl-d \\r\\n (interrupt, soft reset, show prompt)')
+
       await writer.write(new TextEncoder().encode('\x03')) // Ctrl+C to interrupt
       await new Promise(resolve => setTimeout(resolve, 100))
-      
+
       await writer.write(new TextEncoder().encode('\x04')) // Ctrl+D to soft reset
       await new Promise(resolve => setTimeout(resolve, 100))
-      
+
       await writer.write(new TextEncoder().encode('\r\n')) // Enter for prompt
       writer.releaseLock()
       
@@ -188,6 +192,10 @@ export const useSerialStore = defineStore('serial', () => {
   const setDataCallback = (callback: (data: string) => void) => {
     onDataReceived = callback
   }
+
+  const setInfoCallback = (callback: (message: string) => void) => {
+    onInfoMessage = callback
+  }
   
   return {
     // State
@@ -201,6 +209,7 @@ export const useSerialStore = defineStore('serial', () => {
     disconnect,
     sendText,
     uploadCode,
-    setDataCallback
+    setDataCallback,
+    setInfoCallback
   }
 })
