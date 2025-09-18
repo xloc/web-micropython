@@ -1,8 +1,15 @@
 <template>
   <div class="h-full flex flex-col group">
     <!-- Header -->
-    <div class="flex items-center px-3 h-10 bg-zinc-800">
+    <div class="flex items-center justify-between px-3 h-10 bg-zinc-800">
       <h3 class="text-sm font-medium text-gray-400">Explorer</h3>
+      <button
+        @click="syncProject"
+        :disabled="!serialStore.isConnected || serialStore.isUploading"
+        class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
+        title="Sync to Device">
+        <ArrowUpTrayIcon class="size-4" />
+      </button>
     </div>
 
     <!-- Actions -->
@@ -46,14 +53,16 @@
 
 <script setup lang="ts">
 import { watch } from 'vue'
-import { ArrowPathIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
+import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
 import { useFileSystemStore } from '../stores/fileSystem'
 import { usePyodideStore } from '../stores/pyodide'
+import { useSerialStore } from '../stores/serial'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/fileSystem'
 
 const fileSystemStore = useFileSystemStore()
 const pyodideStore = usePyodideStore()
+const serialStore = useSerialStore()
 
 // Load file tree when Pyodide becomes available
 watch(
@@ -95,5 +104,9 @@ const createNewFolder = async () => {
   if (foldername) {
     await fileSystemStore.createDirectory('/mnt', foldername)
   }
+}
+
+const syncProject = async () => {
+  await serialStore.syncProject(fileSystemStore)
 }
 </script>
