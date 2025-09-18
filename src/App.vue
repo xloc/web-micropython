@@ -27,6 +27,9 @@
         <ConsolePanel />
       </div>
     </div>
+
+    <!-- Status Bar -->
+    <StatusBar />
   </div>
 </template>
 
@@ -34,6 +37,7 @@
 import EditorPanel from './components/EditorPanel.vue'
 import ConsolePanel from './components/ConsolePanel.vue'
 import FileExplorer from './components/FileExplorer.vue'
+import StatusBar from './components/StatusBar.vue'
 import { useUIStore } from './stores/ui'
 import { ref } from 'vue'
 
