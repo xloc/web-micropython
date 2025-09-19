@@ -17,6 +17,7 @@
     "@xterm/xterm": "^5.5.0",
     "comlink": "^4.4.2",
     "dedent": "^1.7.0",
+    "material-icon-theme": "^5.27.0",
     "pinia": "^3.0.2",
     "pyodide": "^0.28.2",
     "tailwindcss": "^4.1.4",

@@ -6,17 +6,29 @@
       <!-- File tabs -->
       <div class="flex items-center h-full overflow-x-auto hide-scrollbar">
         <div v-for="file in fileSystemStore.openFilesList" :key="file.path"
-          class="flex items-center px-3 py-1 h-full border-r border-zinc-600 cursor-pointer hover:bg-zinc-600 transition-colors"
-          :class="{
-            'bg-zinc-700': fileSystemStore.activeFilePath === file.path,
-            'bg-zinc-800': fileSystemStore.activeFilePath !== file.path
+          class="flex items-center px-2 py-1 h-full border-r border-zinc-800 cursor-pointer group gap-2" :class="{
+            'bg-zinc-800': fileSystemStore.activeFilePath === file.path,
+            'bg-zinc-700': fileSystemStore.activeFilePath !== file.path
           }" @click="switchToFile(file.path)">
-          <span class="text-sm font-medium pr-2 text-zinc-300">{{ getFileName(file.path) }}</span>
-          <span v-if="file.isDirty" class="w-2 h-2 bg-orange-400 rounded-full" title="Unsaved changes" />
-          <button @click.stop="closeFile(file.path)"
-            class="ml-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 rounded p-0.5" title="Close">
-            ✕
-          </button>
+          <FileIcon :fileName="getFileName(file.path)" class="size-4" />
+          <span class="text-sm font-medium flex-1 truncate text-zinc-300">{{ getFileName(file.path) }}</span>
+
+          <!-- Combined status/close area -->
+          <div class="size-4 flex items-center justify-center ">
+            <!-- Save status dot (shown when file is dirty and not hovering on inactive tabs) -->
+            <div v-if="file.isDirty && !(fileSystemStore.activeFilePath === file.path)"
+              class="flex items-center justify-center group-hover:hidden" title="Unsaved changes">
+              <div class="size-2 bg-zinc-400 rounded-full" />
+            </div>
+
+            <!-- Close button (always shown for active file, shown on hover for others) -->
+            <button @click.stop="closeFile(file.path)" :class="[
+              'size-5 -mx-0.5 items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 rounded',
+              fileSystemStore.activeFilePath === file.path ? 'flex' : 'hidden group-hover:flex'
+            ]" title="Close">
+              <XMarkIcon class="size-4" />
+            </button>
+          </div>
         </div>
 
         <!-- Show message if no files open -->
@@ -77,7 +89,7 @@
 
 <script setup lang="ts">
 import { onMounted, watch, shallowRef } from 'vue'
-import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon } from '@heroicons/vue/20/solid'
+import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
 import { usePyodideStore } from '../stores/pyodide'
@@ -85,6 +97,7 @@ import { useFileSystemStore } from '../stores/fileSystem'
 import { useUIStore } from '../stores/ui'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
+import FileIcon from './FileIcon.vue'
 
 const editorStore = useEditorStore()
 const serialStore = useSerialStore()

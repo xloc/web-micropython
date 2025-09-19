@@ -1,22 +1,17 @@
 <template>
   <div>
     <!-- Current Node -->
-    <div class="flex items-center gap-1 px-1 py-0.5 text-sm cursor-pointer hover:bg-zinc-700"
-      :class="{ 'bg-zinc-700': isActive }"
-      :style="{ paddingLeft: `${level * 12 + 4}px` }" @click="handleClick" @contextmenu.prevent="handleRightClick">
-      <!-- Expand/Collapse Icon for directories -->
+    <div class="flex items-center gap-1.5 px-1 py-0.5 text-sm cursor-pointer hover:bg-zinc-700"
+      :class="{ 'bg-zinc-700': isActive }" :style="{ paddingLeft: `${level * 12 + 4}px` }" @click="handleClick"
+      @contextmenu.prevent="handleRightClick">
+      <!-- File/Folder Icon -->
       <div class="w-4 h-4 flex items-center justify-center">
-        <span v-if="node.type === 'directory'" class="text-xs text-zinc-600">
-          {{ node.isExpanded ? '📂' : '📁' }}
-        </span>
-        <span v-else class="text-xs">
-          {{ getFileIcon(node.name) }}
-        </span>
+        <FileIcon :fileName="node.name" :isFolder="node.type === 'directory'"
+          :isOpen="node.type === 'directory' && node.isExpanded" class="size-4" />
       </div>
 
       <!-- File/Folder Name -->
-      <span class="flex-1 truncate"
-        :class="{ 'font-medium': node.type === 'directory' }">
+      <span class="flex-1 truncate" :class="{ 'font-medium': node.type === 'directory' }">
         {{ node.name }}
       </span>
 
@@ -51,6 +46,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useFileSystemStore } from '../stores/fileSystem'
 import type { FileNode } from '../stores/fileSystem'
+import FileIcon from './FileIcon.vue'
 
 interface Props {
   node: FileNode
@@ -158,26 +154,6 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 
-const getFileIcon = (filename: string): string => {
-  const ext = filename.split('.').pop()?.toLowerCase()
-
-  switch (ext) {
-    case 'py':
-    case 'pyw':
-      return '🐍'
-    case 'js':
-    case 'ts':
-      return '📄'
-    case 'json':
-      return '📋'
-    case 'md':
-      return '📝'
-    case 'txt':
-      return '📄'
-    default:
-      return '📄'
-  }
-}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B'
