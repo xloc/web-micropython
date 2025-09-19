@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch, shallowRef } from 'vue'
+import { onMounted, watch, shallowRef, ref } from 'vue'
 import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
@@ -106,6 +106,7 @@ const fileSystemStore = useFileSystemStore()
 const uiStore = useUIStore()
 
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
+const isUpdatingProgrammatically = ref(false)
 
 // Tab functionality
 const switchToFile = (path: string) => {
@@ -152,7 +153,9 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   // Set initial content from active file if available
   const activeFile = fileSystemStore.activeFile
   if (activeFile) {
+    isUpdatingProgrammatically.value = true
     editor.setValue(activeFile.content)
+    isUpdatingProgrammatically.value = false
   }
 
   // Store-based language service registration happens automatically
@@ -160,12 +163,21 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   // Add custom keyboard shortcuts
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyR, runCode)
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyU, uploadCode)
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveCurrentFile)
+
+  // Add blur event listener for auto-save
+  editor.onDidBlurEditorText(() => {
+    saveCurrentFile()
+  })
 
   // Focus the editor
   editor.focus()
 }
 
 const handleContentChange = (value: string) => {
+  // Don't mark as dirty if we're programmatically updating
+  if (isUpdatingProgrammatically.value) return
+
   const activeFile = fileSystemStore.activeFile
   if (!activeFile) return
 
@@ -204,6 +216,13 @@ const uploadCode = async () => {
   await fileSystemStore.saveFile(activeFile.path)
 }
 
+const saveCurrentFile = async () => {
+  const activeFile = fileSystemStore.activeFile
+  if (activeFile && activeFile.isDirty) {
+    await fileSystemStore.saveFile(activeFile.path)
+  }
+}
+
 // Watch for file changes and update the editor content (with loop prevention)
 watch(
   () => fileSystemStore.activeFile?.content,
@@ -213,7 +232,9 @@ watch(
       if (currentContent !== newContent) {
         // Critical: Only update if content is actually different to prevent infinite loops
         // This is the pattern recommended for Monaco Editor + Vue 3
+        isUpdatingProgrammatically.value = true
         editorInstance.value.setValue(newContent)
+        isUpdatingProgrammatically.value = false
       }
     }
   }
@@ -227,7 +248,9 @@ watch(
       const activeFile = fileSystemStore.activeFile
       if (activeFile) {
         // Load initial content when file changes
+        isUpdatingProgrammatically.value = true
         editorInstance.value.setValue(activeFile.content)
+        isUpdatingProgrammatically.value = false
       }
     }
   }
