@@ -55,25 +55,28 @@
 import { watch } from 'vue'
 import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
 import { useFileSystemStore } from '../stores/fileSystem'
-import { usePyodideStore } from '../stores/pyodide'
+import { useStorageStore } from '../stores/storage'
 import { useSerialStore } from '../stores/serial'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/fileSystem'
 
 const fileSystemStore = useFileSystemStore()
-const pyodideStore = usePyodideStore()
+const storageStore = useStorageStore()
 const serialStore = useSerialStore()
 
-// Load file tree when Pyodide becomes available
+// Initialize OPFS and load file tree when ready
 watch(
-  () => pyodideStore.pyodide,
-  async (pyodide) => {
-    if (pyodide) {
+  () => storageStore.initialized,
+  async (ready) => {
+    if (ready) {
       await fileSystemStore.loadFileTree()
     }
   },
   { immediate: true }
 )
+
+// Kick off OPFS initialization on mount
+storageStore.init()
 
 const handleFileClick = async (node: FileNode) => {
   if (node.type === 'file') {

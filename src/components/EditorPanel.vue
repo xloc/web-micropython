@@ -92,7 +92,6 @@ import { onMounted, watch, shallowRef, ref } from 'vue'
 import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
-import { usePyodideStore } from '../stores/pyodide'
 import { useFileSystemStore } from '../stores/fileSystem'
 import { useUIStore } from '../stores/ui'
 import * as monaco from 'monaco-editor'
@@ -101,7 +100,6 @@ import FileIcon from './FileIcon.vue'
 
 const editorStore = useEditorStore()
 const serialStore = useSerialStore()
-const pyodideStore = usePyodideStore()
 const fileSystemStore = useFileSystemStore()
 const uiStore = useUIStore()
 
@@ -148,7 +146,7 @@ const editorOptions = {
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
-  pyodideStore.editor = editor
+  // Keep a local ref if needed
 
   // Set initial content from active file if available
   const activeFile = fileSystemStore.activeFile
@@ -184,12 +182,7 @@ const handleContentChange = (value: string) => {
   // Update file system store with new content
   fileSystemStore.updateFileContent(activeFile.path, value)
 
-  // Sync to Pyodide file system without await to prevent blocking
-  if (pyodideStore.pyodide) {
-    pyodideStore.pyodide.writeFile(activeFile.path, value).catch(error => {
-      console.error('Error writing to Pyodide FS:', error)
-    })
-  }
+  // OPFS writes happen on explicit save through the store
 }
 
 const runCode = async () => {
