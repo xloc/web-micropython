@@ -255,7 +255,7 @@ onMounted(async () => {
   setTimeout(async () => {
     if (fileSystemStore.openFilesList.length === 0) {
       // Create and open a default file
-      await fileSystemStore.createFile('/mnt', 'main.py')
+      await fileSystemStore.createFile('/sync-root', 'main.py')
       const activeFile = fileSystemStore.activeFile
       if (activeFile) {
         fileSystemStore.updateFileContent(activeFile.path, '# Welcome to MicroPython Web IDE\nprint("Hello, World!")')

@@ -19,8 +19,8 @@ export const useStorageStore = defineStore('storage', () => {
     try {
       const root = await (navigator as any).storage.getDirectory() as FileSystemDirectoryHandle
       originRoot.value = root
-      // Ensure '/mnt' exists
-      const mnt = await root.getDirectoryHandle('mnt', { create: true })
+      // Ensure '/sync-root' exists (project workspace root)
+      const mnt = await root.getDirectoryHandle('sync-root', { create: true })
       mntDir.value = mnt
       initialized.value = true
     } catch (e: any) {
@@ -40,4 +40,3 @@ export const useStorageStore = defineStore('storage', () => {
     init,
   }
 })
-

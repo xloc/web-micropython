@@ -23,7 +23,7 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   const storage = useStorageStore()
 
   // State
-  const projectRoot = ref('/mnt')
+  const projectRoot = ref('/sync-root')
   const fileTree = ref<FileNode | null>(null)
   const openFiles = ref(new Map<string, OpenFile>())
   const activeFilePath = ref<string | null>(null)
@@ -73,11 +73,11 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   }
 
   // Path utilities
-  const stripRoot = (path: string) => path.replace(/^\/mnt\/?/, '')
+  const stripRoot = (path: string) => path.replace(/^\/sync-root\/?/, '')
   const split = (path: string) => stripRoot(path).split('/').filter(Boolean)
   // no join helper needed
 
-  // Resolve directory handle for path (relative to /mnt)
+  // Resolve directory handle for path (relative to /sync-root)
   const resolveDirectory = async (path: string, opts?: { create?: boolean }) => {
     if (!storage.initialized) await storage.init()
     if (!storage.mntDir) throw new Error('OPFS not initialized')
@@ -94,7 +94,7 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   const getParent = async (path: string, opts?: { create?: boolean }) => {
     const segs = split(path)
     const name = segs.pop()
-    const parentPath = '/' + ['mnt', ...segs].join('/')
+    const parentPath = '/' + ['sync-root', ...segs].join('/')
     const parent = await resolveDirectory(parentPath, opts)
     return { parent, name: name || '' }
   }
