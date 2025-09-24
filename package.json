@@ -16,9 +16,13 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "material-icon-theme": "^5.27.0",
+    "monaco-languageserver-types": "^0.4.0",
     "pinia": "^3.0.2",
-    
+    "remote-web-worker": "^0.0.9",
     "tailwindcss": "^4.1.4",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-types": "^3.17.5",
     "vue": "^3.5.13"
   },
   "devDependencies": {

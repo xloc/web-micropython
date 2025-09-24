@@ -73,4 +73,6 @@ const startResize = (event: MouseEvent, divisionIndex: number) => {
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
 }
+
+// Language server is initialized by the editor once a file is open
 </script>

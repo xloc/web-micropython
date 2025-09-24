@@ -94,8 +94,10 @@ import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
 import { useFileSystemStore } from '../stores/fileSystem'
 import { useUIStore } from '../stores/ui'
-import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
+import { ensureLsp, getLsp } from '../language-server/manager'
+import { toUri } from '../language-server/LspClient'
+import { useMonaco } from '@guolao/vue-monaco-editor'
 import FileIcon from './FileIcon.vue'
 
 const editorStore = useEditorStore()
@@ -105,6 +107,7 @@ const uiStore = useUIStore()
 
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
 const isUpdatingProgrammatically = ref(false)
+const { monacoRef } = useMonaco()
 
 // Tab functionality
 const switchToFile = (path: string) => {
@@ -151,17 +154,39 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   // Set initial content from active file if available
   const activeFile = fileSystemStore.activeFile
   if (activeFile) {
-    isUpdatingProgrammatically.value = true
-    editor.setValue(activeFile.content)
-    isUpdatingProgrammatically.value = false
+    // Initialize LSP with any open files
+    const initialFiles: Record<string, string> = {}
+    for (const f of fileSystemStore.openFilesList) {
+      initialFiles[f.path] = f.content
+    }
+    if (Object.keys(initialFiles).length === 0) {
+      initialFiles[activeFile.path] = activeFile.content
+    }
+    await ensureLsp(initialFiles, undefined, monacoRef.value as any)
+
+    // Ensure a model for the active file with proper URI
+    const uriStr = toUri(activeFile.path)
+    const uri = (monacoRef.value as any).Uri.parse(uriStr)
+    let model = (monacoRef.value as any).editor.getModel(uri)
+    if (!model) {
+      model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
+      const lsp = getLsp()
+      if (!lsp.hasDocument(uriStr)) {
+        await lsp.openDocument(uriStr, activeFile.content)
+      }
+    }
+    editor.setModel(model)
   }
 
   // Store-based language service registration happens automatically
 
   // Add custom keyboard shortcuts
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyR, runCode)
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyU, uploadCode)
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveCurrentFile)
+  if (monacoRef.value) {
+    const m = monacoRef.value as any
+    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyR, runCode)
+    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyU, uploadCode)
+    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, saveCurrentFile)
+  }
 
   // Add blur event listener for auto-save
   editor.onDidBlurEditorText(() => {
@@ -183,6 +208,14 @@ const handleContentChange = (value: string) => {
   fileSystemStore.updateFileContent(activeFile.path, value)
 
   // OPFS writes happen on explicit save through the store
+  // Send change to LSP for current model
+  try {
+    const lsp = getLsp()
+    const model = editorInstance.value?.getModel()
+    if (model) {
+      lsp.changeDocument(model.uri.toString(), value)
+    }
+  } catch {}
 }
 
 const runCode = async () => {
@@ -221,12 +254,12 @@ watch(
   () => fileSystemStore.activeFile?.content,
   (newContent) => {
     if (editorInstance.value && newContent !== undefined) {
-      const currentContent = editorInstance.value.getValue()
+      const model = editorInstance.value.getModel()
+      if (!model) return
+      const currentContent = model.getValue()
       if (currentContent !== newContent) {
-        // Critical: Only update if content is actually different to prevent infinite loops
-        // This is the pattern recommended for Monaco Editor + Vue 3
         isUpdatingProgrammatically.value = true
-        editorInstance.value.setValue(newContent)
+        model.setValue(newContent)
         isUpdatingProgrammatically.value = false
       }
     }
@@ -240,10 +273,20 @@ watch(
     if (editorInstance.value && newPath) {
       const activeFile = fileSystemStore.activeFile
       if (activeFile) {
-        // Load initial content when file changes
-        isUpdatingProgrammatically.value = true
-        editorInstance.value.setValue(activeFile.content)
-        isUpdatingProgrammatically.value = false
+        // Switch model when file changes
+        const uriStr = toUri(activeFile.path)
+        const uri = (monacoRef.value as any).Uri.parse(uriStr)
+        let model = (monacoRef.value as any).editor.getModel(uri)
+        if (!model) {
+          model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
+          try {
+            const lsp = getLsp()
+            if (!lsp.hasDocument(uriStr)) {
+              lsp.openDocument(uriStr, activeFile.content)
+            }
+          } catch {}
+        }
+        editorInstance.value.setModel(model)
       }
     }
   }
