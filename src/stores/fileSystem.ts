@@ -127,7 +127,7 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   }
 
   const buildTree = async (path: string, depth = 10): Promise<FileSystemEntry> => {
-    const name = path.split('/').pop() || 'mnt'
+    const name = path.split('/').pop() || 'sync-root'
     try {
       const dir = await resolveDirectory(path)
       const children: FileSystemEntry[] = []

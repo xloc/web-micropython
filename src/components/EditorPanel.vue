@@ -149,7 +149,7 @@ const editorOptions = {
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
-  // Keep a local ref if needed
+  if (!monacoRef.value) return;
 
   // Set initial content from active file if available
   const activeFile = fileSystemStore.activeFile
@@ -162,14 +162,14 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     if (Object.keys(initialFiles).length === 0) {
       initialFiles[activeFile.path] = activeFile.content
     }
-    await ensureLsp(initialFiles, undefined, monacoRef.value as any)
+    await ensureLsp(initialFiles, undefined, monacoRef.value)
 
     // Ensure a model for the active file with proper URI
     const uriStr = toUri(activeFile.path)
-    const uri = (monacoRef.value as any).Uri.parse(uriStr)
-    let model = (monacoRef.value as any).editor.getModel(uri)
+    const uri = (monacoRef.value).Uri.parse(uriStr)
+    let model = (monacoRef.value).editor.getModel(uri)
     if (!model) {
-      model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
+      model = (monacoRef.value).editor.createModel(activeFile.content, editorStore.language, uri)
       const lsp = getLsp()
       if (!lsp.hasDocument(uriStr)) {
         await lsp.openDocument(uriStr, activeFile.content)
@@ -181,12 +181,10 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   // Store-based language service registration happens automatically
 
   // Add custom keyboard shortcuts
-  if (monacoRef.value) {
-    const m = monacoRef.value as any
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyR, runCode)
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyU, uploadCode)
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, saveCurrentFile)
-  }
+  const m = monacoRef.value
+  editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyR, runCode)
+  editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyU, uploadCode)
+  editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, saveCurrentFile)
 
   // Add blur event listener for auto-save
   editor.onDidBlurEditorText(() => {
@@ -215,7 +213,7 @@ const handleContentChange = (value: string) => {
     if (model) {
       lsp.changeDocument(model.uri.toString(), value)
     }
-  } catch {}
+  } catch { }
 }
 
 const runCode = async () => {
@@ -284,7 +282,7 @@ watch(
             if (!lsp.hasDocument(uriStr)) {
               lsp.openDocument(uriStr, activeFile.content)
             }
-          } catch {}
+          } catch { }
         }
         editorInstance.value.setModel(model)
       }

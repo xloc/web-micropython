@@ -98,14 +98,14 @@ const refreshFileTree = async () => {
 const createNewFile = async () => {
   const filename = prompt('Enter filename:')
   if (filename) {
-    await fileSystemStore.createFile('/mnt', filename)
+    await fileSystemStore.createFile('/sync-root', filename)
   }
 }
 
 const createNewFolder = async () => {
   const foldername = prompt('Enter folder name:')
   if (foldername) {
-    await fileSystemStore.createDirectory('/mnt', foldername)
+    await fileSystemStore.createDirectory('/sync-root', foldername)
   }
 }
 

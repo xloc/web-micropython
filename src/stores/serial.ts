@@ -238,7 +238,7 @@ export const useSerialStore = defineStore('serial', () => {
       // Build directory path incrementally (to ensure parent dirs are created first)
       let currentPath = ''
       for (const part of pathParts) {
-        if (part && part !== 'mnt') { // Skip empty parts and 'mnt' root
+        if (part && part !== 'sync-root') { // Skip empty parts and 'sync-root' root
           currentPath += (currentPath ? '/' : '') + part
           if (currentPath) {
             dirPaths.add(currentPath)
@@ -265,8 +265,8 @@ except Exception as e:
 
   // Write a file to the MicroPython device
   const writeRemoteFile = async (filePath: string, content: string) => {
-    // Remove /mnt prefix for the device path
-    const devicePath = filePath.replace(/^\/mnt\//, '')
+    // Remove /sync-root prefix for the device path
+    const devicePath = filePath.replace(/^\/sync-root\//, '')
     const escapedContent = escapePythonString(content)
 
     const command = `

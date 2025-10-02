@@ -1,6 +1,7 @@
 import { LspClient } from './LspClient'
 import type { SessionOptions } from './sessionManager'
 import { registerMonacoProviders, applyDiagnostics } from './monacoIntegration'
+import { ensureConfigFile, readConfigText, CONFIG_PATH } from '../services/pyrightConfig'
 // no type import needed; monaco instance is passed at runtime
 
 let client: LspClient | null = null
@@ -18,7 +19,10 @@ export async function ensureLsp(initialFiles: Record<string, string>, options?: 
       onWaitingForInitialization: () => {},
       onDiagnostics: (uri, diags) => monacoInstance && applyDiagnostics(monacoInstance, uri, diags),
     })
-    await client.initialize(options, initialFiles)
+    await ensureConfigFile()
+    const cfgText = await readConfigText()
+    const seeded: Record<string, string> = { ...initialFiles, [CONFIG_PATH]: cfgText }
+    await client.initialize(options, seeded)
     registerMonacoProviders(monaco, client)
     inited = true
   }
