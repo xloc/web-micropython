@@ -32,31 +32,31 @@
       </div>
 
       <!-- Sync progress overlay -->
-      <div v-if="serialStore.syncProgress"
+      <div v-if="syncStore.progress"
         class="absolute inset-0 bg-black/80 flex items-center justify-center">
         <div class="bg-zinc-800 rounded-lg p-6 max-w-sm w-full mx-4 border border-zinc-700">
           <div class="text-center">
-            <div class="text-lg font-medium text-white mb-2">{{ serialStore.syncProgress.operation }}</div>
+            <div class="text-lg font-medium text-white mb-2">{{ syncStore.progress.operation }}</div>
 
             <!-- Progress bar -->
             <div class="w-full bg-zinc-700 rounded-full h-2 mb-3">
               <div
                 class="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                :style="{ width: `${(serialStore.syncProgress.current / serialStore.syncProgress.total) * 100}%` }">
+                :style="{ width: `${(syncStore.progress.current / syncStore.progress.total) * 100}%` }">
               </div>
             </div>
 
             <!-- Progress text -->
             <div class="text-sm text-zinc-300 mb-2">
-              {{ serialStore.syncProgress.current }} / {{ serialStore.syncProgress.total }}
-              <span v-if="serialStore.syncProgress.total > 0">
-                ({{ Math.round((serialStore.syncProgress.current / serialStore.syncProgress.total) * 100) }}%)
+              {{ syncStore.progress.current }} / {{ syncStore.progress.total }}
+              <span v-if="syncStore.progress.total > 0">
+                ({{ Math.round((syncStore.progress.current / syncStore.progress.total) * 100) }}%)
               </span>
             </div>
 
             <!-- Current file -->
-            <div v-if="serialStore.syncProgress.currentFile" class="text-xs text-zinc-400 truncate">
-              {{ serialStore.syncProgress.currentFile }}
+            <div v-if="syncStore.progress.currentPath" class="text-xs text-zinc-400 truncate">
+              {{ syncStore.progress.currentPath }}
             </div>
           </div>
         </div>
@@ -71,8 +71,10 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { LinkSlashIcon } from '@heroicons/vue/20/solid'
 import { useSerialStore } from '../stores/serial'
+import { useSyncStore } from '../stores/sync'
 
 const serialStore = useSerialStore()
+const syncStore = useSyncStore()
 const terminalRef = ref<HTMLElement>()
 
 let terminal: Terminal | null = null

@@ -5,7 +5,7 @@
       <h3 class="text-sm font-medium text-gray-400">Explorer</h3>
       <button
         @click="syncProject"
-        :disabled="!serialStore.isConnected || serialStore.isUploading"
+        :disabled="!serialStore.isConnected || syncStore.isSyncing"
         class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
         title="Sync to Device">
         <ArrowUpTrayIcon class="size-4" />
@@ -57,12 +57,14 @@ import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from
 import { useWorkspaceStore } from '../stores/workspace'
 import { useStorageStore } from '../stores/storage'
 import { useSerialStore } from '../stores/serial'
+import { useSyncStore } from '../stores/sync'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/workspace'
 
 const workspaceStore = useWorkspaceStore()
 const storageStore = useStorageStore()
 const serialStore = useSerialStore()
+const syncStore = useSyncStore()
 
 // Initialize OPFS and load file tree when ready
 watch(
@@ -110,6 +112,6 @@ const createNewFolder = async () => {
 }
 
 const syncProject = async () => {
-  await serialStore.syncProject(workspaceStore)
+  await syncStore.syncProject()
 }
 </script>
