@@ -65,8 +65,8 @@
         </button>
 
         <!-- Console toggle -->
-        <button @click="uiStore.toggleConsole" class="p-1 hover:bg-white/20 text-zinc-400 rounded transition-colors"
-          :title="uiStore.isConsoleVisible ? 'Hide Console' : 'Show Console'">
+        <button @click="layoutStore.toggleConsole" class="p-1 hover:bg-white/20 text-zinc-400 rounded transition-colors"
+          :title="layoutStore.consoleVisible ? 'Hide Console' : 'Show Console'">
           <CommandLineIcon class="size-4" />
         </button>
       </div>
@@ -93,7 +93,7 @@ import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon } from 
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
 import { useFileSystemStore } from '../stores/fileSystem'
-import { useUIStore } from '../stores/ui'
+import { useLayoutStore } from '../stores/layout'
 import type { editor } from 'monaco-editor'
 import { ensureLsp, getLsp } from '../language-server/manager'
 import { toUri } from '../language-server/LspClient'
@@ -103,7 +103,7 @@ import FileIcon from './FileIcon.vue'
 const editorStore = useEditorStore()
 const serialStore = useSerialStore()
 const fileSystemStore = useFileSystemStore()
-const uiStore = useUIStore()
+const layoutStore = useLayoutStore()
 
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
 const isUpdatingProgrammatically = ref(false)

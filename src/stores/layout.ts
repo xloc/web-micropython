@@ -2,24 +2,20 @@ import { defineStore } from 'pinia'
 import { useLocalStorage } from '@vueuse/core'
 import { computed } from 'vue'
 
-export const useUIStore = defineStore('ui', () => {
+// useLayoutStore — Layout: panel divisions, console toggle, layout reset.
+export const useLayoutStore = defineStore('layout', () => {
   // Monotonic divisions array: [fileExplorerEnd, editorEnd]
   const divisions = useLocalStorage('micropython-ide-divisions', [0.2, 0.7])
-  const isConsoleVisible = useLocalStorage('micropython-ide-console-visible', true)
+  const consoleVisible = useLocalStorage('micropython-ide-console-visible', true)
 
-  // Computed panel widths
+  // Derived widths
   const fileExplorerWidth = computed(() => divisions.value[0])
   const editorWidth = computed(() =>
-    isConsoleVisible.value
-      ? divisions.value[1] - divisions.value[0]
-      : 1 - divisions.value[0]
+    consoleVisible.value ? divisions.value[1] - divisions.value[0] : 1 - divisions.value[0]
   )
   const consoleWidth = computed(() => 1 - divisions.value[1])
 
-  // Legacy computed for backward compatibility
-  const splitRatio = computed(() => divisions.value[1])
-
-  // Actions
+  // Action: updateDivision(index, value) (use original implementation)
   const updateDivision = (index: number, value: number) => {
     const newDivisions = [...divisions.value]
     newDivisions[index] = value
@@ -37,31 +33,26 @@ export const useUIStore = defineStore('ui', () => {
     divisions.value = newDivisions
   }
 
-  const updateSplitRatio = (ratio: number) => {
-    updateDivision(1, ratio)
-  }
-
+  // Convenience actions for UI
   const toggleConsole = () => {
-    isConsoleVisible.value = !isConsoleVisible.value
+    consoleVisible.value = !consoleVisible.value
   }
-
   const resetLayout = () => {
     divisions.value = [0.2, 0.7]
-    isConsoleVisible.value = true
+    consoleVisible.value = true
   }
 
   return {
     // State
     divisions,
+    consoleVisible,
+    // Derived
     fileExplorerWidth,
     editorWidth,
     consoleWidth,
-    splitRatio,
-    isConsoleVisible,
     // Actions
     updateDivision,
-    updateSplitRatio,
     toggleConsole,
-    resetLayout
+    resetLayout,
   }
 })

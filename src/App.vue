@@ -3,7 +3,7 @@
     <!-- Main content area with three panels -->
     <div class="flex-1 overflow-hidden flex">
       <!-- File Explorer Panel -->
-      <div class="overflow-hidden bg-gray-100" :style="{ width: `${uiStore.fileExplorerWidth * 100}%` }">
+      <div class="overflow-hidden bg-gray-100" :style="{ width: `${layout.fileExplorerWidth * 100}%` }">
         <FileExplorer />
       </div>
 
@@ -13,17 +13,17 @@
         @mousedown="(e) => startResize(e, 0)" />
 
       <!-- Editor Panel -->
-      <div class="overflow-hidden" :style="{ width: `${uiStore.editorWidth * 100}%` }">
+      <div class="overflow-hidden" :style="{ width: `${layout.editorWidth * 100}%` }">
         <EditorPanel />
       </div>
 
       <!-- Editor Divider -->
-      <div v-if="uiStore.isConsoleVisible"
+      <div v-if="layout.consoleVisible"
         class="flex-none border-transparent bg-clip-padding bg-zinc-700 hover:bg-blue-500 hover:border-blue-500/50 transition-all duration-200 z-10 w-[11px] -mx-[5px] border-x-[5px] cursor-col-resize"
         @mousedown="(e) => startResize(e, 1)" />
 
       <!-- Console Panel -->
-      <div v-if="uiStore.isConsoleVisible" class="overflow-hidden flex-1">
+      <div v-if="layout.consoleVisible" class="overflow-hidden flex-1">
         <ConsolePanel />
       </div>
     </div>
@@ -38,10 +38,10 @@ import EditorPanel from './components/EditorPanel.vue'
 import ConsolePanel from './components/ConsolePanel.vue'
 import FileExplorer from './components/FileExplorer.vue'
 import StatusBar from './components/StatusBar.vue'
-import { useUIStore } from './stores/ui'
+import { useLayoutStore } from './stores/layout'
 import { ref } from 'vue'
 
-const uiStore = useUIStore()
+const layout = useLayoutStore()
 const isResizing = ref(false)
 
 const startResize = (event: MouseEvent, divisionIndex: number) => {
@@ -57,7 +57,7 @@ const startResize = (event: MouseEvent, divisionIndex: number) => {
     const relativePos = currentPos - containerRect.left
     const ratio = relativePos / containerSize
 
-    uiStore.updateDivision(divisionIndex, ratio)
+    layout.updateDivision(divisionIndex, ratio)
   }
 
   const handleMouseUp = () => {
