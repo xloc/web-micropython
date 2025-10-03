@@ -1,10 +1,10 @@
-import { useFileSystemStore } from '../stores/fileSystem'
+import { useWorkspaceStore } from '../stores/workspace'
 import { getLsp } from './manager'
 import { CONFIG_PATH, readConfigText } from '../services/pyrightConfig'
 
 // Sets up a watcher that reinitializes the LSP when pyrightconfig.json is saved.
 export function initConfigWatcher() {
-  const fs = useFileSystemStore()
+  const fs = useWorkspaceStore()
   fs.$onAction(({ name, args, after }) => {
     if (name !== 'saveFile') return
     after(async () => {
@@ -15,7 +15,7 @@ export function initConfigWatcher() {
         const cfg = await readConfigText()
         // Gather current open files (latest content)
         const initial: Record<string, string> = {}
-        for (const ofile of fs.openFilesList) {
+        for (const ofile of fs.openTabs) {
           initial[ofile.path] = ofile.content
         }
         // Ensure config is included
@@ -28,4 +28,3 @@ export function initConfigWatcher() {
     })
   })
 }
-

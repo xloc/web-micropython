@@ -1,14 +1,14 @@
 <template>
   <div class="h-full w-full flex flex-col bg-zinc-800">
     <!-- Tab bar - only show when files are open -->
-    <div v-if="fileSystemStore.openFilesList.length > 0"
+    <div v-if="workspaceStore.openTabs.length > 0"
       class="flex items-center justify-between bg-zinc-800 pr-4 h-10">
       <!-- File tabs -->
       <div class="flex items-center h-full overflow-x-auto hide-scrollbar">
-        <div v-for="file in fileSystemStore.openFilesList" :key="file.path"
+        <div v-for="file in workspaceStore.openTabs" :key="file.path"
           class="flex items-center px-2 py-1 h-full border-r border-zinc-800 cursor-pointer group gap-2" :class="{
-            'bg-zinc-800': fileSystemStore.activeFilePath === file.path,
-            'bg-zinc-700': fileSystemStore.activeFilePath !== file.path
+            'bg-zinc-800': workspaceStore.activePath === file.path,
+            'bg-zinc-700': workspaceStore.activePath !== file.path
           }" @click="switchToFile(file.path)">
           <FileIcon :fileName="getFileName(file.path)" class="size-4" />
           <span class="text-sm font-medium flex-1 truncate text-zinc-300">{{ getFileName(file.path) }}</span>
@@ -16,7 +16,7 @@
           <!-- Combined status/close area -->
           <div class="size-4 flex items-center justify-center ">
             <!-- Save status dot (shown when file is dirty and not hovering on inactive tabs) -->
-            <div v-if="file.isDirty && !(fileSystemStore.activeFilePath === file.path)"
+            <div v-if="file.isDirty && !(workspaceStore.activePath === file.path)"
               class="flex items-center justify-center group-hover:hidden" title="Unsaved changes">
               <div class="size-2 bg-zinc-400 rounded-full" />
             </div>
@@ -24,15 +24,15 @@
             <!-- Close button (always shown for active file, shown on hover for others) -->
             <button @click.stop="closeFile(file.path)" :class="[
               'size-5 -mx-0.5 items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 rounded',
-              fileSystemStore.activeFilePath === file.path ? 'flex' : 'hidden group-hover:flex'
+              workspaceStore.activePath === file.path ? 'flex' : 'hidden group-hover:flex'
             ]" title="Close">
-              <XMarkIcon class="size-4" />
+             <XMarkIcon class="size-4" />
             </button>
           </div>
         </div>
 
         <!-- Show message if no files open -->
-        <div v-if="fileSystemStore.openFilesList.length === 0" class="px-3 py-1 text-zinc-500 text-sm">
+        <div v-if="workspaceStore.openTabs.length === 0" class="px-3 py-1 text-zinc-500 text-sm">
           No files open
         </div>
       </div>
@@ -74,7 +74,7 @@
 
     <!-- Editor content -->
     <div class="flex-1">
-      <vue-monaco-editor v-if="fileSystemStore.activeFile" :language="editorStore.language" :options="editorOptions"
+      <vue-monaco-editor v-if="workspaceStore.activeDoc" :language="editorStore.language" :options="editorOptions"
         @mount="handleEditorMount" @change="handleContentChange" class="h-full" />
 
       <div v-else class="h-full flex items-center justify-center text-gray-400">
@@ -92,7 +92,7 @@ import { onMounted, watch, shallowRef, ref } from 'vue'
 import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
-import { useFileSystemStore } from '../stores/fileSystem'
+import { useWorkspaceStore } from '../stores/workspace'
 import { useLayoutStore } from '../stores/layout'
 import type { editor } from 'monaco-editor'
 import { ensureLsp, getLsp } from '../language-server/manager'
@@ -102,7 +102,7 @@ import FileIcon from './FileIcon.vue'
 
 const editorStore = useEditorStore()
 const serialStore = useSerialStore()
-const fileSystemStore = useFileSystemStore()
+const workspaceStore = useWorkspaceStore()
 const layoutStore = useLayoutStore()
 
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
@@ -111,11 +111,11 @@ const { monacoRef } = useMonaco()
 
 // Tab functionality
 const switchToFile = (path: string) => {
-  fileSystemStore.activeFilePath = path
+  workspaceStore.activePath = path
 }
 
 const closeFile = (path: string) => {
-  fileSystemStore.closeFile(path)
+  workspaceStore.closeFile(path)
 }
 
 const getFileName = (path: string): string => {
@@ -152,11 +152,11 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   if (!monacoRef.value) return;
 
   // Set initial content from active file if available
-  const activeFile = fileSystemStore.activeFile
+  const activeFile = workspaceStore.activeDoc
   if (activeFile) {
     // Initialize LSP with any open files
     const initialFiles: Record<string, string> = {}
-    for (const f of fileSystemStore.openFilesList) {
+    for (const f of workspaceStore.openTabs) {
       initialFiles[f.path] = f.content
     }
     if (Object.keys(initialFiles).length === 0) {
@@ -199,11 +199,11 @@ const handleContentChange = (value: string) => {
   // Don't mark as dirty if we're programmatically updating
   if (isUpdatingProgrammatically.value) return
 
-  const activeFile = fileSystemStore.activeFile
+  const activeFile = workspaceStore.activeDoc
   if (!activeFile) return
 
   // Update file system store with new content
-  fileSystemStore.updateFileContent(activeFile.path, value)
+  workspaceStore.updateFileContent(activeFile.path, value)
 
   // OPFS writes happen on explicit save through the store
   // Send change to LSP for current model
@@ -221,70 +221,64 @@ const runCode = async () => {
     return
   }
 
-  const activeFile = fileSystemStore.activeFile
+  const activeFile = workspaceStore.activeDoc
   if (!activeFile) {
     return
   }
 
   await serialStore.uploadCode(activeFile.content, true)
-  await fileSystemStore.saveFile(activeFile.path)
+  await workspaceStore.saveFile(activeFile.path)
 }
 
 const uploadCode = async () => {
   if (!serialStore.isConnected) return
 
-  const activeFile = fileSystemStore.activeFile
+  const activeFile = workspaceStore.activeDoc
   if (!activeFile) return
 
   await serialStore.uploadCode(activeFile.content, false)
-  await fileSystemStore.saveFile(activeFile.path)
+  await workspaceStore.saveFile(activeFile.path)
 }
 
 const saveCurrentFile = async () => {
-  const activeFile = fileSystemStore.activeFile
+  const activeFile = workspaceStore.activeDoc
   if (activeFile && activeFile.isDirty) {
-    await fileSystemStore.saveFile(activeFile.path)
+    await workspaceStore.saveFile(activeFile.path)
   }
 }
 
-// Watch for file changes and update the editor content (with loop prevention)
+// Unified watcher: when active path or its content changes, switch model then sync content
 watch(
-  () => fileSystemStore.activeFile?.content,
-  (newContent) => {
-    if (editorInstance.value && newContent !== undefined) {
-      const model = editorInstance.value.getModel()
-      if (!model) return
-      const currentContent = model.getValue()
-      if (currentContent !== newContent) {
+  () => [workspaceStore.activeDoc?.path, workspaceStore.activeDoc?.content] as const,
+  async ([newPath, newContent]) => {
+    if (!editorInstance.value || !monacoRef.value || !newPath) return
+    const activeFile = workspaceStore.activeDoc
+    if (!activeFile) return
+
+    const uriStr = toUri(activeFile.path)
+    const uri = (monacoRef.value as any).Uri.parse(uriStr)
+    let model = (monacoRef.value as any).editor.getModel(uri)
+    if (!model) {
+      model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
+      try {
+        const lsp = getLsp()
+        if (!lsp.hasDocument(uriStr)) {
+          await lsp.openDocument(uriStr, activeFile.content)
+        }
+      } catch { /* LSP may not be ready; ignore */ }
+    }
+
+    const currentModel = editorInstance.value.getModel()
+    if (!currentModel || currentModel.uri.toString() !== model.uri.toString()) {
+      editorInstance.value.setModel(model)
+    }
+
+    if (newContent !== undefined) {
+      const currentValue = model.getValue()
+      if (currentValue !== newContent) {
         isUpdatingProgrammatically.value = true
         model.setValue(newContent)
         isUpdatingProgrammatically.value = false
-      }
-    }
-  }
-)
-
-// Watch for active file path changes to load initial content
-watch(
-  () => fileSystemStore.activeFilePath,
-  (newPath) => {
-    if (editorInstance.value && newPath) {
-      const activeFile = fileSystemStore.activeFile
-      if (activeFile) {
-        // Switch model when file changes
-        const uriStr = toUri(activeFile.path)
-        const uri = (monacoRef.value as any).Uri.parse(uriStr)
-        let model = (monacoRef.value as any).editor.getModel(uri)
-        if (!model) {
-          model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
-          try {
-            const lsp = getLsp()
-            if (!lsp.hasDocument(uriStr)) {
-              lsp.openDocument(uriStr, activeFile.content)
-            }
-          } catch { }
-        }
-        editorInstance.value.setModel(model)
       }
     }
   }
@@ -294,12 +288,12 @@ watch(
 onMounted(async () => {
   // Wait a bit for file system to initialize
   setTimeout(async () => {
-    if (fileSystemStore.openFilesList.length === 0) {
+    if (workspaceStore.openTabs.length === 0) {
       // Create and open a default file
-      await fileSystemStore.createFile('/sync-root', 'main.py')
-      const activeFile = fileSystemStore.activeFile
+      await workspaceStore.createFile('/sync-root', 'main.py')
+      const activeFile = workspaceStore.activeDoc
       if (activeFile) {
-        fileSystemStore.updateFileContent(activeFile.path, '# Welcome to MicroPython Web IDE\nprint("Hello, World!")')
+        workspaceStore.updateFileContent(activeFile.path, '# Welcome to MicroPython Web IDE\nprint("Hello, World!")')
       }
     }
   }, 1000)

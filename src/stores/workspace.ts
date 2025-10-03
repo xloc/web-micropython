@@ -12,22 +12,22 @@ export interface FileNode {
   isExpanded?: boolean
 }
 
-export interface OpenFile {
+export interface OpenTab {
   path: string
   content: string
   isDirty: boolean
   lastSaved: Date
 }
 
-export const useFileSystemStore = defineStore('fileSystem', () => {
+export const useWorkspaceStore = defineStore('workspace', () => {
   const storage = useStorageStore()
 
   // State
   const projectRoot = ref('/sync-root')
   const fileTree = ref<FileNode | null>(null)
-  const openFiles = ref(new Map<string, OpenFile>())
-  const activeFilePath = ref<string | null>(null)
-  const isLoading = ref(false)
+  const openTabs = ref<OpenTab[]>([])
+  const activePath = ref<string | null>(null)
+  const loading = ref(false)
   const error = ref<string | null>(null)
 
   // Internal types for entries from OPFS
@@ -42,17 +42,10 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   }
 
   // Computed
-  const activeFile = computed(() =>
-    activeFilePath.value ? openFiles.value.get(activeFilePath.value) : null
+  const activeDoc = computed(() =>
+    activePath.value ? openTabs.value.find(t => t.path === activePath.value) ?? null : null
   )
-
-  const dirtyFiles = computed(() =>
-    Array.from(openFiles.value.values()).filter(file => file.isDirty)
-  )
-
-  const openFilesList = computed(() =>
-    Array.from(openFiles.value.values())
-  )
+  const openPaths = computed(() => openTabs.value.map(t => t.path))
 
   // Helper function to convert FileSystemEntry to FileNode
   const convertToFileNode = (entry: FileSystemEntry & { children?: FileSystemEntry[] }): FileNode => {
@@ -154,7 +147,7 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
 
   // Actions
   const loadFileTree = async (path = projectRoot.value) => {
-    isLoading.value = true
+    loading.value = true
     error.value = null
 
     try {
@@ -165,14 +158,14 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
       error.value = `Failed to load file tree: ${e.message}`
       console.error('Failed to load file tree:', e)
     } finally {
-      isLoading.value = false
+      loading.value = false
     }
   }
 
   const openFile = async (path: string) => {
     // If file is already open, just switch to it
-    if (openFiles.value.has(path)) {
-      activeFilePath.value = path
+    if (openTabs.value.some(t => t.path === path)) {
+      activePath.value = path
       return
     }
 
@@ -180,13 +173,13 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
       if (!storage.initialized) await storage.init()
       const fh = await getFileHandle(path)
       const content = await (await fh.getFile()).text()
-      openFiles.value.set(path, {
+      openTabs.value.push({
         path,
         content,
         isDirty: false,
         lastSaved: new Date()
       })
-      activeFilePath.value = path
+      activePath.value = path
     } catch (e: any) {
       error.value = `Failed to open file: ${e.message}`
       console.error('Failed to open file:', e)
@@ -194,17 +187,17 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   }
 
   const closeFile = (path: string) => {
-    openFiles.value.delete(path)
+    const idx = openTabs.value.findIndex(t => t.path === path)
+    if (idx !== -1) openTabs.value.splice(idx, 1)
 
     // If this was the active file, switch to another open file or null
-    if (activeFilePath.value === path) {
-      const remainingFiles = Array.from(openFiles.value.keys())
-      activeFilePath.value = remainingFiles.length > 0 ? remainingFiles[0] : null
+    if (activePath.value === path) {
+      activePath.value = openTabs.value.length > 0 ? openTabs.value[0].path : null
     }
   }
 
   const saveFile = async (path: string) => {
-    const file = openFiles.value.get(path)
+    const file = openTabs.value.find(t => t.path === path)
     if (!file) {
       error.value = `File not found in open files: ${path}`
       return
@@ -225,12 +218,12 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   }
 
   const saveAllFiles = async () => {
-    const promises = dirtyFiles.value.map(file => saveFile(file.path))
+    const promises = openTabs.value.filter(f => f.isDirty).map(file => saveFile(file.path))
     await Promise.all(promises)
   }
 
   const updateFileContent = (path: string, content: string) => {
-    const file = openFiles.value.get(path)
+    const file = openTabs.value.find(t => t.path === path)
     if (file) {
       file.content = content
       file.isDirty = true
@@ -285,9 +278,9 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
       await (parent as any).removeEntry(name, { recursive: true })
 
       // Close any open files in this directory
-      for (const filePath of openFiles.value.keys()) {
-        if (filePath.startsWith(path + '/')) {
-          closeFile(filePath)
+      for (const tab of [...openTabs.value]) {
+        if (tab.path.startsWith(path + '/')) {
+          closeFile(tab.path)
         }
       }
 
@@ -338,14 +331,11 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
       }
 
       // If the renamed item was a file that's open, update the path
-      if (openFiles.value.has(oldPath)) {
-        const file = openFiles.value.get(oldPath)!
-        openFiles.value.delete(oldPath)
-        file.path = newPath
-        openFiles.value.set(newPath, file)
-
-        if (activeFilePath.value === oldPath) {
-          activeFilePath.value = newPath
+      const tab = openTabs.value.find(t => t.path === oldPath)
+      if (tab) {
+        tab.path = newPath
+        if (activePath.value === oldPath) {
+          activePath.value = newPath
         }
       }
 
@@ -364,12 +354,11 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
     // State
     projectRoot,
     fileTree,
-    openFiles: openFiles as any, // Make it readonly for external access
-    activeFilePath,
-    activeFile,
-    dirtyFiles,
-    openFilesList,
-    isLoading,
+    openTabs,
+    activePath,
+    activeDoc,
+    openPaths,
+    loading,
     error,
 
     // Actions

@@ -281,8 +281,8 @@ except Exception as e:
   }
 
   // Main sync function
-  const syncProject = async (fileSystemStore: any) => {
-    if (!isConnected.value || !fileSystemStore.fileTree) {
+  const syncProject = async (workspaceStore: any) => {
+    if (!isConnected.value || !workspaceStore.fileTree) {
       if (onInfoMessage) onInfoMessage('❌ Cannot sync: Not connected or no files to sync')
       return
     }
@@ -294,19 +294,19 @@ except Exception as e:
       if (onInfoMessage) onInfoMessage('🚀 Starting project sync...')
 
       // Collect all files from the file tree
-      const allFiles = getAllFilesRecursively(fileSystemStore.fileTree)
+      const allFiles = getAllFilesRecursively(workspaceStore.fileTree)
 
       // Read actual file contents
       for (const file of allFiles) {
-        const openFile = fileSystemStore.openFiles.get(file.path)
-        if (openFile) {
-          file.content = openFile.content
+        const openTab = workspaceStore.openTabs?.find?.((t: any) => t.path === file.path)
+        if (openTab) {
+          file.content = openTab.content
         } else {
           // Read file content from the file system if not already open
           try {
-            await fileSystemStore.openFile(file.path)
-            const openedFile = fileSystemStore.openFiles.get(file.path)
-            file.content = openedFile?.content || ''
+            await workspaceStore.openFile(file.path)
+            const opened = workspaceStore.openTabs?.find?.((t: any) => t.path === file.path)
+            file.content = opened?.content || ''
           } catch (error) {
             console.warn(`Could not read file ${file.path}:`, error)
             file.content = ''

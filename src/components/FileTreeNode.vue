@@ -44,8 +44,8 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useFileSystemStore } from '../stores/fileSystem'
-import type { FileNode } from '../stores/fileSystem'
+import { useWorkspaceStore } from '../stores/workspace'
+import type { FileNode } from '../stores/workspace'
 import FileIcon from './FileIcon.vue'
 
 interface Props {
@@ -60,10 +60,10 @@ const emit = defineEmits<{
   'folder-click': [node: FileNode]
 }>()
 
-const fileSystemStore = useFileSystemStore()
+const workspaceStore = useWorkspaceStore()
 
 const isActive = computed(() => {
-  return props.node.type === 'file' && fileSystemStore.activeFilePath === props.node.path
+  return props.node.type === 'file' && workspaceStore.activePath === props.node.path
 })
 
 const sortedChildren = computed(() => {
@@ -118,7 +118,7 @@ const handleRename = async () => {
     const newPath = `${parentPath}/${newName.trim()}`
 
     try {
-      await fileSystemStore.renameEntry(props.node.path, newPath)
+      await workspaceStore.renameEntry(props.node.path, newPath)
     } catch (error: any) {
       alert(`Failed to rename: ${error.message}`)
     }
@@ -130,9 +130,9 @@ const handleDelete = async () => {
 
   try {
     if (props.node.type === 'directory') {
-      await fileSystemStore.deleteDirectory(props.node.path)
+      await workspaceStore.deleteDirectory(props.node.path)
     } else {
-      await fileSystemStore.deleteFile(props.node.path)
+      await workspaceStore.deleteFile(props.node.path)
     }
   } catch (error: any) {
     alert(`Failed to delete: ${error.message}`)

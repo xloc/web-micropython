@@ -29,16 +29,16 @@
 
     <!-- File Tree -->
     <div class="flex-1 overflow-auto bg-zinc-800 text-zinc-300">
-      <div v-if="fileSystemStore.isLoading" class="text-sm text-gray-500 p-2">
+      <div v-if="workspaceStore.loading" class="text-sm text-gray-500 p-2">
         Loading...
       </div>
 
-      <div v-else-if="fileSystemStore.error" class="text-sm text-red-600 p-2">
-        Error: {{ fileSystemStore.error }}
+      <div v-else-if="workspaceStore.error" class="text-sm text-red-600 p-2">
+        Error: {{ workspaceStore.error }}
       </div>
 
-      <div v-else-if="fileSystemStore.fileTree">
-        <FileTreeNode :node="fileSystemStore.fileTree" :level="0" @file-click="handleFileClick"
+      <div v-else-if="workspaceStore.fileTree">
+        <FileTreeNode :node="workspaceStore.fileTree" :level="0" @file-click="handleFileClick"
           @folder-click="handleFolderClick" />
       </div>
 
@@ -54,13 +54,13 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
-import { useFileSystemStore } from '../stores/fileSystem'
+import { useWorkspaceStore } from '../stores/workspace'
 import { useStorageStore } from '../stores/storage'
 import { useSerialStore } from '../stores/serial'
 import FileTreeNode from './FileTreeNode.vue'
-import type { FileNode } from '../stores/fileSystem'
+import type { FileNode } from '../stores/workspace'
 
-const fileSystemStore = useFileSystemStore()
+const workspaceStore = useWorkspaceStore()
 const storageStore = useStorageStore()
 const serialStore = useSerialStore()
 
@@ -69,7 +69,7 @@ watch(
   () => storageStore.initialized,
   async (ready) => {
     if (ready) {
-      await fileSystemStore.loadFileTree()
+      await workspaceStore.loadFileTree()
     }
   },
   { immediate: true }
@@ -80,7 +80,7 @@ storageStore.init()
 
 const handleFileClick = async (node: FileNode) => {
   if (node.type === 'file') {
-    await fileSystemStore.openFile(node.path)
+    await workspaceStore.openFile(node.path)
   }
 }
 
@@ -92,24 +92,24 @@ const handleFolderClick = (node: FileNode) => {
 }
 
 const refreshFileTree = async () => {
-  await fileSystemStore.loadFileTree()
+  await workspaceStore.loadFileTree()
 }
 
 const createNewFile = async () => {
   const filename = prompt('Enter filename:')
   if (filename) {
-    await fileSystemStore.createFile('/sync-root', filename)
+    await workspaceStore.createFile('/sync-root', filename)
   }
 }
 
 const createNewFolder = async () => {
   const foldername = prompt('Enter folder name:')
   if (foldername) {
-    await fileSystemStore.createDirectory('/sync-root', foldername)
+    await workspaceStore.createDirectory('/sync-root', foldername)
   }
 }
 
 const syncProject = async () => {
-  await serialStore.syncProject(fileSystemStore)
+  await serialStore.syncProject(workspaceStore)
 }
 </script>

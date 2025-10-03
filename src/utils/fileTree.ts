@@ -1,4 +1,4 @@
-import type { FileNode } from '../stores/fileSystem'
+import type { FileNode } from '../stores/workspace'
 
 /**
  * Find a node in the tree by path
