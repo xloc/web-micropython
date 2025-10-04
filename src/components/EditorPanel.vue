@@ -95,7 +95,7 @@ import { useSerialStore } from '../stores/serial'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useLayoutStore } from '../stores/layout'
 import type { editor } from 'monaco-editor'
-import { ensureLsp, getLsp } from '../language-server/manager'
+import { useLspStore } from '../stores/lsp'
 import { toUri } from '../language-server/LspClient'
 import { useMonaco } from '@guolao/vue-monaco-editor'
 import FileIcon from './FileIcon.vue'
@@ -104,6 +104,7 @@ const editorStore = useEditorStore()
 const serialStore = useSerialStore()
 const workspaceStore = useWorkspaceStore()
 const layoutStore = useLayoutStore()
+const lspStore = useLspStore()
 
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
 const isUpdatingProgrammatically = ref(false)
@@ -162,7 +163,10 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     if (Object.keys(initialFiles).length === 0) {
       initialFiles[activeFile.path] = activeFile.content
     }
-    await ensureLsp(initialFiles, undefined, monacoRef.value)
+    await lspStore.init(initialFiles)
+    if (monacoRef.value) {
+      lspStore.attachMonaco(monacoRef.value)
+    }
 
     // Ensure a model for the active file with proper URI
     const uriStr = toUri(activeFile.path)
@@ -170,9 +174,8 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     let model = (monacoRef.value).editor.getModel(uri)
     if (!model) {
       model = (monacoRef.value).editor.createModel(activeFile.content, editorStore.language, uri)
-      const lsp = getLsp()
-      if (!lsp.hasDocument(uriStr)) {
-        await lsp.openDocument(uriStr, activeFile.content)
+      if (!lspStore.hasDocument(uriStr)) {
+        await lspStore.openDocument(uriStr, activeFile.content)
       }
     }
     editor.setModel(model)
@@ -208,10 +211,9 @@ const handleContentChange = (value: string) => {
   // OPFS writes happen on explicit save through the store
   // Send change to LSP for current model
   try {
-    const lsp = getLsp()
     const model = editorInstance.value?.getModel()
     if (model) {
-      lsp.changeDocument(model.uri.toString(), value)
+      lspStore.changeDocument(model.uri.toString(), value)
     }
   } catch { }
 }
@@ -261,9 +263,8 @@ watch(
     if (!model) {
       model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
       try {
-        const lsp = getLsp()
-        if (!lsp.hasDocument(uriStr)) {
-          await lsp.openDocument(uriStr, activeFile.content)
+        if (!lspStore.hasDocument(uriStr)) {
+          await lspStore.openDocument(uriStr, activeFile.content)
         }
       } catch { /* LSP may not be ready; ignore */ }
     }

@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useStorageStore } from './storage'
+import { useLspStore } from './lsp'
+import { CONFIG_PATH } from '../services/pyrightConfig'
 
 export interface FileNode {
   name: string
@@ -211,6 +213,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       await writable.close()
       file.isDirty = false
       file.lastSaved = new Date()
+
+      // If pyrightconfig.json was saved, refresh LSP settings with current open docs
+      if (path === CONFIG_PATH) {
+        try {
+          const lsp = useLspStore()
+          const initial: Record<string, string> = {}
+          for (const t of openTabs.value) {
+            initial[t.path] = t.content
+          }
+          initial[CONFIG_PATH] = file.content
+          await lsp.updateSettings({}, initial)
+        } catch {
+          // LSP may not be initialized; ignore
+        }
+      }
     } catch (e: any) {
       error.value = `Failed to save file: ${e.message}`
       console.error('Failed to save file:', e)
