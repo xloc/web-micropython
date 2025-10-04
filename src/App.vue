@@ -18,12 +18,12 @@
       </div>
 
       <!-- Editor Divider -->
-      <div v-if="layout.consoleVisible"
+      <div v-show="layout.consoleVisible"
         class="flex-none border-transparent bg-clip-padding bg-zinc-700 hover:bg-blue-500 hover:border-blue-500/50 transition-all duration-200 z-10 w-[11px] -mx-[5px] border-x-[5px] cursor-col-resize"
         @mousedown="(e) => startResize(e, 1)" />
 
       <!-- Console Panel -->
-      <div v-if="layout.consoleVisible" class="overflow-hidden flex-1">
+      <div v-show="layout.consoleVisible" class="overflow-hidden flex-1">
         <ConsolePanel />
       </div>
     </div>

@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full w-full flex flex-col bg-zinc-900">
+  <div class="h-full w-full flex flex-col bg-zinc-900" :class="{ 'opacity-0': panelHidden }">
     <!-- Tab bar -->
     <div class="flex items-center justify-between bg-zinc-800 pr-4 h-10">
       <div class="flex items-center h-full">
@@ -72,11 +72,14 @@ import { FitAddon } from '@xterm/addon-fit'
 import { LinkSlashIcon } from '@heroicons/vue/20/solid'
 import { useSerialStore } from '../stores/serial'
 import { useSyncStore } from '../stores/sync'
+import { useLayoutStore } from '../stores/layout'
 
 const serialStore = useSerialStore()
 const syncStore = useSyncStore()
+const layoutStore = useLayoutStore()
 const shell = serialStore.getConsoleShell()
 const terminalRef = ref<HTMLElement>()
+const panelHidden = ref(false)
 
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
@@ -170,6 +173,27 @@ watch(() => serialStore.busy, (b) => {
   // Change cursor style based on input state
   terminal.options.cursorStyle = b ? 'underline' : 'block'
 
+})
+
+// Fit after becoming visible again using Tailwind opacity class gating
+watch(() => layoutStore.consoleVisible, async (visible) => {
+  if (visible) {
+    panelHidden.value = true
+    await nextTick()
+    requestAnimationFrame(() => {
+      if (fitAddon) fitAddon.fit()
+      requestAnimationFrame(() => {
+        panelHidden.value = false
+      })
+    })
+  }
+})
+
+// Fit after becoming visible again
+watch(() => layoutStore.consoleVisible, (visible) => {
+  if (visible && fitAddon) {
+    setTimeout(() => fitAddon!.fit(), 50)
+  }
 })
 </script>
 
