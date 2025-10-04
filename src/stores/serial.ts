@@ -1,397 +1,152 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
+type FlowControlType = 'none' | 'hardware'
+type ParityType = 'none' | 'even' | 'odd'
+
 export const useSerialStore = defineStore('serial', () => {
-  // State
+  // Low-level state
   const port = ref<SerialPort | null>(null)
-  const isConnected = ref(false)
-  const isRawMode = ref(false)
-  const userInputEnabled = ref(true)
-  const syncProgress = ref<{ current: number; total: number; currentFile: string; operation: string } | null>(null)
+  const settings = ref({ baudRate: 115200, dataBits: 8 as number, parity: 'none' as ParityType, stopBits: 1 as number, flowControl: 'none' as FlowControlType })
+  const busy = ref<null | { reason: string; detail?: string }>(null)
 
-  // Computed properties
-  const isUploading = computed(() => syncProgress.value !== null)
+  // Derived
+  const isConnected = computed(() => !!port.value)
 
-  // Callbacks for handling data
-  let onDataReceived: ((data: string) => void) | null = null
-  let onInfoMessage: ((message: string) => void) | null = null
-
-  // Keep track of the reader for proper cleanup
+  // Data routing
   let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null
-  
-  // Actions
-  const connect = async () => {
+  let consoleOnData: ((data: string) => void) | null = null
+  let sessionOnData: ((data: string) => void) | null = null
+  let sessionActive = false
+
+  const writeRaw = async (text: string) => {
+    if (!port.value || !port.value.writable) return
+    const writer = port.value.writable.getWriter()
     try {
-      port.value = await navigator.serial.requestPort()
-      
-      await port.value.open({ 
-        baudRate: 115200,
-        dataBits: 8,
-        stopBits: 1,
-        parity: 'none',
-        flowControl: 'none'
-      })
-      
-      // Set DTR and RTS signals for proper MicroPython device initialization
-      await port.value.setSignals({ 
-        dataTerminalReady: true, 
-        requestToSend: false 
-      })
-      
-      // Small delay to let the device initialize
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      isConnected.value = true
-      startReading()
-      
-      // Send initialization sequence to wake up MicroPython REPL
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
-      // Send commands directly (now that isConnected is true)
-      if (!port.value.writable) {
-        throw new Error('Port writable stream not available')
-      }
-      const writer = port.value.writable.getWriter()
-
-      if (onInfoMessage) onInfoMessage('Send Ctrl-c Ctrl-d \\r\\n (interrupt, soft reset, show prompt)')
-
-      await writer.write(new TextEncoder().encode('\x03')) // Ctrl+C to interrupt
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      await writer.write(new TextEncoder().encode('\x04')) // Ctrl+D to soft reset
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      await writer.write(new TextEncoder().encode('\r\n')) // Enter for prompt
-      writer.releaseLock()
-      
-    } catch (error) {
-      console.error('Failed to connect:', error)
-      isConnected.value = false
-    }
-  }
-  
-  const disconnect = async () => {
-    if (port.value) {
-      // Cancel the reader first if it exists
-      if (currentReader) {
-        try {
-          await currentReader.cancel()
-          currentReader = null
-        } catch (error) {
-          console.warn('Error canceling reader:', error)
-        }
-      }
-
-      // Close the port
-      try {
-        await port.value.close()
-      } catch (error) {
-        console.warn('Error closing port:', error)
-      }
-
-      port.value = null
-      isConnected.value = false
-    }
-  }
-  
-  const sendText = async (text: string) => {
-    if (!port.value || !isConnected.value) {
-      return
-    }
-    
-    try {
-      if (!port.value.writable) {
-        throw new Error('Port writable stream not available')
-      }
-      const writer = port.value.writable.getWriter()
-      const encoded = new TextEncoder().encode(text)
-      await writer.write(encoded)
-      writer.releaseLock()
-    } catch (error) {
-      console.error('❌ Error sending to serial port:', error)
-    }
-  }
-  
-  const enterRawMode = async () => {
-    userInputEnabled.value = false
-    isRawMode.value = true
-    await sendText('\x01') // Ctrl+A
-  }
-  
-  const exitRawMode = async () => {
-    await sendText('\x04') // Ctrl+D
-    isRawMode.value = false
-    userInputEnabled.value = true
-  }
-  
-  const uploadCode = async (code: string, executeAfterUpload = true) => {
-    if (!isConnected.value) return
-
-    syncProgress.value = { current: 1, total: 1, currentFile: 'code', operation: 'Uploading code' }
-
-    try {
-      await enterRawMode()
-      await sendText(code)
-
-      if (executeAfterUpload) {
-        await sendText('\x04') // Execute
-      }
-
-      await exitRawMode()
-    } catch (error) {
-      console.error('Upload failed:', error)
+      await writer.write(new TextEncoder().encode(text))
     } finally {
-      syncProgress.value = null
+      writer.releaseLock()
     }
   }
-  
+
   const startReading = async () => {
-    if (!port.value) {
-      return
-    }
-
-    if (!port.value.readable) {
-      return
-    }
-
+    if (!port.value || !port.value.readable) return
     const reader = port.value.readable.getReader()
     currentReader = reader
-
     try {
       while (true) {
         const { value, done } = await reader.read()
-
-        if (done) {
-          break
-        }
-
-        if (!value) {
-          continue
-        }
-
+        if (done) break
+        if (!value) continue
         const text = new TextDecoder().decode(value)
-        if (onDataReceived) {
-          onDataReceived(text)
-        }
+        if (sessionActive) sessionOnData?.(text)
+        else consoleOnData?.(text)
       }
     } catch (error) {
-      // Don't log cancellation errors as they're expected during disconnect
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('❌ Reading error:', error)
-        console.error('❌ Error details:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        })
       }
     } finally {
-      if (currentReader === reader) {
-        currentReader = null
-      }
+      if (currentReader === reader) currentReader = null
       reader.releaseLock()
     }
   }
-  
-  const setDataCallback = (callback: (data: string) => void) => {
-    onDataReceived = callback
-  }
 
-  const setInfoCallback = (callback: (message: string) => void) => {
-    onInfoMessage = callback
-  }
-
-  // Helper function to escape Python string content
-  const escapePythonString = (content: string): string => {
-    return content
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t')
-  }
-
-  // Helper function to collect all files recursively from file tree
-  const getAllFilesRecursively = (node: any): Array<{ path: string; content: string }> => {
-    const files: Array<{ path: string; content: string }> = []
-
-    if (node.type === 'file') {
-      // We'll need to read the file content from the file system store
-      files.push({ path: node.path, content: '' }) // Content will be filled later
-    } else if (node.type === 'directory' && node.children) {
-      for (const child of node.children) {
-        files.push(...getAllFilesRecursively(child))
-      }
+  // Shell API
+  const getConsoleShell = () => {
+    return {
+      send: async (text: string) => {
+        if (sessionActive) return // paused during session
+        await writeRaw(text)
+      },
+      onData: (cb: (data: string) => void) => {
+        consoleOnData = cb
+      },
+      resize: (_cols?: number, _rows?: number) => { /* no-op */ },
     }
-
-    return files
   }
 
-  // Helper function to get all unique directory paths
-  const getAllDirectoryPaths = (files: Array<{ path: string; content: string }>): string[] => {
-    const dirPaths = new Set<string>()
+  const openSession = async (reason: string) => {
+    if (!isConnected.value) throw new Error('Not connected')
+    if (sessionActive) throw new Error('Session already active')
+    busy.value = { reason }
+    sessionActive = true
+    // Enter raw mode
+    await writeRaw('\x01')
+    await new Promise((r) => setTimeout(r, 50))
 
-    for (const file of files) {
-      const pathParts = file.path.split('/')
-      pathParts.pop() // Remove filename
-
-      // Build directory path incrementally (to ensure parent dirs are created first)
-      let currentPath = ''
-      for (const part of pathParts) {
-        if (part && part !== 'sync-root') { // Skip empty parts and 'sync-root' root
-          currentPath += (currentPath ? '/' : '') + part
-          if (currentPath) {
-            dirPaths.add(currentPath)
-          }
+    return {
+      send: async (text: string) => {
+        await writeRaw(text)
+      },
+      onData: (cb: (data: string) => void) => {
+        sessionOnData = cb
+      },
+      close: async () => {
+        try {
+          await writeRaw('\x04') // execute/exit
+          await new Promise((r) => setTimeout(r, 50))
+        } finally {
+          sessionOnData = null
+          sessionActive = false
+          busy.value = null
         }
-      }
+      },
     }
-
-    return Array.from(dirPaths).sort() // Sort to ensure parent dirs come first
   }
 
-  // Create a directory on the MicroPython device
-  const createRemoteDirectory = async (dirPath: string) => {
-    const command = `
-import os
-try:
-    os.makedirs('${dirPath}', exist_ok=True)
-    # print('DIR_CREATED: ${dirPath}')
-except Exception as e:
-    print('DIR_ERROR:', e)
-`
-    await sendText(command)
-  }
-
-  // Write a file to the MicroPython device
-  const writeRemoteFile = async (filePath: string, content: string) => {
-    // Remove /sync-root prefix for the device path
-    const devicePath = filePath.replace(/^\/sync-root\//, '')
-    const escapedContent = escapePythonString(content)
-
-    const command = `
-try:
-    with open('${devicePath}', 'w') as f:
-        f.write('${escapedContent}')
-    # print('FILE_WRITTEN: ${devicePath}')
-except Exception as e:
-    print('FILE_ERROR:', e)
-`
-    await sendText(command)
-  }
-
-  // Main sync function
-  const syncProject = async (workspaceStore: any) => {
-    if (!isConnected.value || !workspaceStore.fileTree) {
-      if (onInfoMessage) onInfoMessage('❌ Cannot sync: Not connected or no files to sync')
-      return
-    }
-
+  // Connection API
+  const connect = async () => {
     try {
-      // Start sync process
-      syncProgress.value = { current: 0, total: 0, currentFile: '', operation: 'Preparing sync...' }
-
-      if (onInfoMessage) onInfoMessage('🚀 Starting project sync...')
-
-      // Collect all files from the file tree
-      const allFiles = getAllFilesRecursively(workspaceStore.fileTree)
-
-      // Read actual file contents
-      for (const file of allFiles) {
-        const openTab = workspaceStore.openTabs?.find?.((t: any) => t.path === file.path)
-        if (openTab) {
-          file.content = openTab.content
-        } else {
-          // Read file content from the file system if not already open
-          try {
-            await workspaceStore.openFile(file.path)
-            const opened = workspaceStore.openTabs?.find?.((t: any) => t.path === file.path)
-            file.content = opened?.content || ''
-          } catch (error) {
-            console.warn(`Could not read file ${file.path}:`, error)
-            file.content = ''
-          }
-        }
-      }
-
-      // Get all directory paths
-      const directories = getAllDirectoryPaths(allFiles)
-      const totalOperations = directories.length + allFiles.length
-
-      syncProgress.value = {
-        current: 0,
-        total: totalOperations,
-        currentFile: '',
-        operation: 'Entering raw mode...'
-      }
-
-      // Enter raw mode
-      await enterRawMode()
-      await new Promise(resolve => setTimeout(resolve, 100)) // Small delay
-
-      // Create directories first
-      for (let i = 0; i < directories.length; i++) {
-        const dirPath = directories[i]
-        syncProgress.value = {
-          current: i + 1,
-          total: totalOperations,
-          currentFile: dirPath,
-          operation: 'Creating directory'
-        }
-
-        await createRemoteDirectory(dirPath)
-        await new Promise(resolve => setTimeout(resolve, 50)) // Small delay between operations
-      }
-
-      // Upload files
-      for (let i = 0; i < allFiles.length; i++) {
-        const file = allFiles[i]
-        syncProgress.value = {
-          current: directories.length + i + 1,
-          total: totalOperations,
-          currentFile: file.path,
-          operation: 'Uploading file'
-        }
-
-        await writeRemoteFile(file.path, file.content)
-        await new Promise(resolve => setTimeout(resolve, 50)) // Small delay between operations
-      }
-
-      // Exit raw mode
-      await exitRawMode()
-
-      if (onInfoMessage) onInfoMessage(`✅ Sync completed: ${allFiles.length} files uploaded`)
-
+      port.value = await navigator.serial.requestPort()
+      await port.value.open({
+        baudRate: settings.value.baudRate,
+        dataBits: settings.value.dataBits as any,
+        stopBits: settings.value.stopBits as any,
+        parity: settings.value.parity as any,
+        flowControl: settings.value.flowControl as any,
+      } as any)
+      await port.value.setSignals({ dataTerminalReady: true, requestToSend: false })
+      await new Promise((r) => setTimeout(r, 100))
+      startReading()
+      // Wake up REPL
+      await new Promise((r) => setTimeout(r, 200))
+      await writeRaw('\x03') // interrupt
+      await new Promise((r) => setTimeout(r, 100))
+      await writeRaw('\x04') // soft reset
+      await new Promise((r) => setTimeout(r, 100))
+      await writeRaw('\r\n') // prompt
     } catch (error) {
-      console.error('Sync failed:', error)
-      if (onInfoMessage) onInfoMessage(`❌ Sync failed: ${error}`)
-
-      // Ensure we exit raw mode even on error
-      try {
-        await exitRawMode()
-      } catch (exitError) {
-        console.error('Failed to exit raw mode:', exitError)
-      }
-    } finally {
-      syncProgress.value = null
+      console.error('Failed to connect:', error)
+      port.value = null
     }
   }
-  
+
+  const disconnect = async () => {
+    if (port.value) {
+      if (currentReader) {
+        try { await currentReader.cancel() } catch {}
+        currentReader = null
+      }
+      try { await port.value.close() } catch {}
+      port.value = null
+      busy.value = null
+      sessionOnData = null
+      sessionActive = false
+    }
+  }
+
   return {
     // State
     port,
+    settings,
+    busy,
+    // Derived
     isConnected,
-    isUploading,
-    isRawMode,
-    userInputEnabled,
-    syncProgress,
-    // Actions
+    // API
     connect,
     disconnect,
-    sendText,
-    uploadCode,
-    syncProject,
-    setDataCallback,
-    setInfoCallback
+    getConsoleShell,
+    openSession,
   }
 })

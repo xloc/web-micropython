@@ -75,6 +75,7 @@ import { useSyncStore } from '../stores/sync'
 
 const serialStore = useSerialStore()
 const syncStore = useSyncStore()
+const shell = serialStore.getConsoleShell()
 const terminalRef = ref<HTMLElement>()
 
 let terminal: Terminal | null = null
@@ -99,7 +100,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   resizeObserver.disconnect()
   // Clear the callback to avoid memory leaks
-  serialStore.setDataCallback(() => { })
+  shell.onData(() => { })
   if (terminal) {
     terminal.dispose()
   }
@@ -139,28 +140,19 @@ onMounted(async () => {
   }, 100)
 
   // Handle user input
-  terminal.onData((data: string) => {
-    if (serialStore.userInputEnabled && serialStore.isConnected) {
-      serialStore.sendText(data)
+  terminal.onData(async (data: string) => {
+    if (serialStore.isConnected && !serialStore.busy) {
+      await shell.send(data)
     } else {
-      // Echo back locally for testing when not connected
+      // Echo back locally for testing when not connected or paused
       terminal?.write(data)
     }
   })
 
 
-  // Set up callback for serial data
-  serialStore.setDataCallback((data: string) => {
-    if (terminal) {
-      terminal.write(data)
-    }
-  })
-
-  // Set up callback for info messages
-  serialStore.setInfoCallback((message: string) => {
-    if (terminal) {
-      terminal.write(`\x1b[90m${message}\x1b[0m\r\n`) // Gray text
-    }
+  // Wire console shell data
+  shell.onData((data: string) => {
+    if (terminal) terminal.write(data)
   })
 
   window.addEventListener('resize', handleResize)
@@ -171,12 +163,12 @@ onMounted(async () => {
   }
 })
 
-// Watch user input enabled state for visual feedback
-watch(() => serialStore.userInputEnabled, (enabled) => {
+// Watch busy state for visual feedback
+watch(() => serialStore.busy, (b) => {
   if (!terminal) return
 
   // Change cursor style based on input state
-  terminal.options.cursorStyle = enabled ? 'block' : 'underline'
+  terminal.options.cursorStyle = b ? 'underline' : 'block'
 
 })
 </script>

@@ -133,11 +133,8 @@ export const useSyncStore = defineStore('sync', () => {
       progress.value = { current: 0, total: totalOps, currentPath: '', operation: 'Preparing sync...' }
       status.value = { phase: 'syncing' }
 
-      // Pause console input and enter raw mode
-      serial.userInputEnabled = false
-      await delay(50)
-      await serial.sendText('\x01') // Ctrl+A enter raw mode
-      await delay(100)
+      // Open exclusive session (enters raw mode)
+      const session = await serial.openSession('sync')
 
       const started = Date.now()
       let done = 0
@@ -170,15 +167,11 @@ export const useSyncStore = defineStore('sync', () => {
         const devicePath = stripRoot(f.path)
         const escaped = escapePythonString(content)
         const cmd = `\ntry:\n    with open('${devicePath}', 'w') as _f:\n        _f.write('${escaped}')\nexcept Exception as e:\n    print('FILE_ERROR:', e)\n`
-        await serial.sendText(cmd)
+        await session.send(cmd)
         bytes += new TextEncoder().encode(content).length
         await delay(30)
       }
-
-      // Execute and exit raw mode
-      await serial.sendText('\x04') // Ctrl+D execute
-      await delay(100)
-      serial.userInputEnabled = true
+      await session.close()
 
       // Done
       result.value = {
@@ -195,9 +188,6 @@ export const useSyncStore = defineStore('sync', () => {
       status.value = { phase: 'error', error: e?.message ?? String(e) }
     } finally {
       progress.value = null
-      // Ensure input is re-enabled
-      const serial = useSerialStore()
-      serial.userInputEnabled = true
     }
   }
 
@@ -222,4 +212,3 @@ export const useSyncStore = defineStore('sync', () => {
     cancel,
   }
 })
-

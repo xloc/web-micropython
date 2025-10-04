@@ -51,16 +51,16 @@
         </button>
 
         <!-- Upload button -->
-        <button @click="uploadCode" :disabled="!serialStore.isConnected || serialStore.isUploading"
+        <button @click="uploadCode" :disabled="!serialStore.isConnected || serialStore.busy"
           class="p-1 hover:bg-white/20 text-zinc-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title="Upload Code">
           <ArrowUpTrayIcon class="size-4" />
         </button>
 
         <!-- Run button -->
-        <button @click="runCode" :disabled="!serialStore.isConnected || serialStore.isUploading"
+        <button @click="runCode" :disabled="!serialStore.isConnected || serialStore.busy"
           class="p-1 hover:bg-white/20 text-green-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          :title="serialStore.isUploading ? 'Running...' : 'Run Code'">
+          :title="serialStore.busy ? 'Busy...' : 'Run Code'">
           <PlayIcon class="size-4" />
         </button>
 
@@ -219,26 +219,30 @@ const handleContentChange = (value: string) => {
 }
 
 const runCode = async () => {
-  if (!serialStore.isConnected) {
-    return
-  }
-
+  if (!serialStore.isConnected) return
   const activeFile = workspaceStore.activeDoc
-  if (!activeFile) {
-    return
-  }
+  if (!activeFile) return
 
-  await serialStore.uploadCode(activeFile.content, true)
+  const session = await serialStore.openSession('run')
+  try {
+    await session.send(activeFile.content)
+  } finally {
+    await session.close()
+  }
   await workspaceStore.saveFile(activeFile.path)
 }
 
 const uploadCode = async () => {
   if (!serialStore.isConnected) return
-
   const activeFile = workspaceStore.activeDoc
   if (!activeFile) return
 
-  await serialStore.uploadCode(activeFile.content, false)
+  const session = await serialStore.openSession('upload')
+  try {
+    await session.send(activeFile.content)
+  } finally {
+    await session.close()
+  }
   await workspaceStore.saveFile(activeFile.path)
 }
 
