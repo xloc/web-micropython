@@ -138,11 +138,14 @@ export class LspClient {
     for (const doc of this._documents.values()) {
       files[fromUri(doc.uri)] = doc.text;
     }
-    // pyright config at /sync-root
-    files[`${rootPath}pyrightconfig.json`] = JSON.stringify({
+    // pyright config at /sync-root: prefer provided config text when available
+    const configKey = `${rootPath}pyrightconfig.json`;
+    const providedConfigText = initialFiles?.[configKey];
+    const defaultConfigText = JSON.stringify({
       typeshedPath: '/typeshed',
       ...(sessionOptions?.configOverrides ?? {}),
     });
+    files[configKey] = providedConfigText ?? defaultConfigText;
 
     const init: InitializeParams = {
       rootUri,

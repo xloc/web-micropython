@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useStorageStore } from './storage'
 import { useLspStore } from './lsp'
-import { CONFIG_PATH } from '../services/pyrightConfig'
+import { CONFIG_PATH, ensureConfigFile } from '../services/pyrightConfig'
 
 export interface FileNode {
   name: string
@@ -154,6 +154,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     try {
       if (!storage.initialized) await storage.init()
+      // Ensure pyrightconfig.json exists before building the tree so it shows on first load
+      await ensureConfigFile()
       const tree = await buildTree(path)
       fileTree.value = convertToFileNode(tree)
     } catch (e: any) {
