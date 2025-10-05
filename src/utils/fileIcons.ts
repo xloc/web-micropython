@@ -56,7 +56,8 @@ export const folderIcons: FolderIconDefinition[] = [
     folderNames: ['utils', 'util', 'utilities']
   },
   {
-    name: 'folder-assets',
+    // Use available icon name from material-icon-theme
+    name: 'folder-public',
     folderNames: ['assets', 'static', 'public']
   }
 ]
@@ -110,5 +111,6 @@ export function getFolderIcon(folderName: string, isOpen: boolean = false): stri
  * Get the SVG import path for an icon
  */
 export function getIconPath(iconName: string): string {
-  return `/node_modules/material-icon-theme/icons/${iconName}.svg`
+  // Served locally from public/material-icons to work on GitHub Pages subpaths
+  return `material-icons/${iconName}.svg`
 }
