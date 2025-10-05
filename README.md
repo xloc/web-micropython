@@ -78,3 +78,14 @@ src/
 - `xterm` - Terminal emulator
 - `xterm-addon-fit` - Auto-resize addon
 - `@types/w3c-web-serial` - Web Serial API TypeScript types
+
+## Deploy to GitHub Pages
+
+This project is configured to deploy to GitHub Pages under a repository subpath, e.g. `https://<user>.github.io/<project>/`.
+
+- Vite build uses a relative base so all assets load correctly from a subpath.
+- Monaco Editor and the Python LSP (BasedPyright) are loaded from CDNs, so they are not affected by the site origin or subpath.
+
+How to deploy:
+- Enable Pages in repository settings (Settings → Pages → Source: GitHub Actions).
+- Push to `main` or run the workflow manually. The workflow `.github/workflows/deploy.yml` builds the site and publishes `dist/` to Pages.
