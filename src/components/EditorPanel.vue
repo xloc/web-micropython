@@ -51,14 +51,14 @@
         </button>
 
         <!-- Upload button -->
-        <button @click="uploadCode" :disabled="!serialStore.isConnected || serialStore.busy"
+        <button @click="uploadCode" :disabled="!serialStore.isConnected || !!serialStore.busy"
           class="p-1 hover:bg-white/20 text-zinc-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title="Upload Code">
           <ArrowUpTrayIcon class="size-4" />
         </button>
 
         <!-- Run button -->
-        <button @click="runCode" :disabled="!serialStore.isConnected || serialStore.busy"
+        <button @click="runCode" :disabled="!serialStore.isConnected || !!serialStore.busy"
           class="p-1 hover:bg-white/20 text-green-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           :title="serialStore.busy ? 'Busy...' : 'Run Code'">
           <PlayIcon class="size-4" />

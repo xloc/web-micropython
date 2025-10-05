@@ -145,7 +145,7 @@ export const useSyncStore = defineStore('sync', () => {
         if (status.value.cancelRequested) break
         progress.value = { current: ++done, total: totalOps, currentPath: dir, operation: 'Creating directory' }
         const cmd = `\nimport os\ntry:\n    os.makedirs('${dir}', exist_ok=True)\nexcept Exception as e:\n    print('DIR_ERROR:', e)\n`
-        await serial.sendText(cmd)
+        await session.send(cmd)
         await delay(30)
       }
 
