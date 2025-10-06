@@ -195,10 +195,23 @@ export class LspClient {
 
     await this.connection.sendRequest(InitializeRequest.type, init);
 
-    // Update the settings.
+    // Update the settings - disable inlay hints
     await this.connection.sendNotification(
       new NotificationType<DidChangeConfigurationParams>('workspace/didChangeConfiguration'),
-      { settings: {} }
+      {
+        settings: {
+          basedpyright: {
+            analysis: {
+              inlayHints: {
+                variableTypes: false,
+                callArgumentNames: false,
+                functionReturnTypes: false,
+                genericTypes: false,
+              },
+            },
+          },
+        },
+      }
     );
 
     // Open seeded files
