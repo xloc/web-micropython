@@ -69,6 +69,33 @@ const flattenedTree = computed(() => {
   return workspaceStore.fileTree?.children || []
 })
 
+// Recursively find and expand nodes along a path
+const expandPathInTree = (nodes: FileNode[], targetPath: string): boolean => {
+  for (const node of nodes) {
+    // Check if this node is on the path to the target
+    if (targetPath.startsWith(node.path + '/') || targetPath === node.path) {
+      if (node.type === 'directory') {
+        node.isExpanded = true
+        if (node.children && targetPath !== node.path) {
+          expandPathInTree(node.children, targetPath)
+        }
+      }
+      return true
+    }
+  }
+  return false
+}
+
+// Auto-expand tree to show active file
+watch(
+  () => workspaceStore.activePath,
+  (newPath) => {
+    if (newPath && flattenedTree.value.length > 0) {
+      expandPathInTree(flattenedTree.value, newPath)
+    }
+  }
+)
+
 // Initialize VFS and load file tree when ready
 watch(
   () => workspaceStore.initialized,
