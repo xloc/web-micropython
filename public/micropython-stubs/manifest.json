@@ -4,6 +4,7 @@
     "micropython.pyi",
     "network.pyi",
     "esp.pyi",
-    "esp32.pyi"
+    "esp32.pyi",
+    "neopixel.pyi"
   ]
 }
