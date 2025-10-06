@@ -1,6 +1,9 @@
 {
   "files": [
-    "machine/__init__.pyi"
+    "machine.pyi",
+    "micropython.pyi",
+    "network.pyi",
+    "esp.pyi",
+    "esp32.pyi"
   ]
 }
-
