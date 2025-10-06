@@ -1,4 +1,4 @@
-import { fileExists, readTextFile, writeTextFile } from './opfs'
+import type { VFS } from './vfs'
 
 export const CONFIG_PATH = '/sync-root/pyrightconfig.json'
 
@@ -13,15 +13,15 @@ export const defaultConfig = {
   ],
 }
 
-export async function ensureConfigFile(): Promise<void> {
-  const exists = await fileExists(CONFIG_PATH)
+export async function ensureConfigFile(vfs: VFS): Promise<void> {
+  const exists = await vfs.exists(CONFIG_PATH)
   if (!exists) {
-    await writeTextFile(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2))
+    await vfs.writeFile(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2))
   }
 }
 
-export async function readConfigText(): Promise<string> {
-  const exists = await fileExists(CONFIG_PATH)
-  if (!exists) await ensureConfigFile()
-  return await readTextFile(CONFIG_PATH)
+export async function readConfigText(vfs: VFS): Promise<string> {
+  const exists = await vfs.exists(CONFIG_PATH)
+  if (!exists) await ensureConfigFile(vfs)
+  return await vfs.readFile(CONFIG_PATH)
 }

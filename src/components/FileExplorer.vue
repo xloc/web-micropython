@@ -55,20 +55,18 @@
 import { watch } from 'vue'
 import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
 import { useWorkspaceStore } from '../stores/workspace'
-import { useStorageStore } from '../stores/storage'
 import { useSerialStore } from '../stores/serial'
 import { useSyncStore } from '../stores/sync'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/workspace'
 
 const workspaceStore = useWorkspaceStore()
-const storageStore = useStorageStore()
 const serialStore = useSerialStore()
 const syncStore = useSyncStore()
 
-// Initialize OPFS and load file tree when ready
+// Initialize VFS and load file tree when ready
 watch(
-  () => storageStore.initialized,
+  () => workspaceStore.initialized,
   async (ready) => {
     if (ready) {
       await workspaceStore.loadFileTree()
@@ -77,8 +75,8 @@ watch(
   { immediate: true }
 )
 
-// Kick off OPFS initialization on mount
-storageStore.init()
+// Kick off VFS initialization on mount
+workspaceStore.init()
 
 const handleFileClick = async (node: FileNode) => {
   if (node.type === 'file') {

@@ -3,7 +3,6 @@ import { shallowRef, ref } from 'vue'
 import { LspClient } from '../language-server/LspClient'
 import type { SessionOptions } from '../language-server/sessionManager'
 import { registerMonacoProviders, applyDiagnostics } from '../language-server/monacoIntegration'
-import { ensureConfigFile, readConfigText, CONFIG_PATH } from '../services/pyrightConfig'
 
 type Phase = 'idle' | 'initializing' | 'providers' | 'ready' | 'error'
 
@@ -33,10 +32,8 @@ export const useLspStore = defineStore('lsp', () => {
         },
       })
 
-      await ensureConfigFile()
-      const cfgText = await readConfigText()
-      const seeded = { ...initialFiles, [CONFIG_PATH]: cfgText }
-      await c.initialize(options, seeded)
+      // initialFiles should already contain CONFIG_PATH if needed
+      await c.initialize(options, initialFiles)
       phase.value = monacoAttached.value ? 'ready' : 'providers'
     } catch (e: any) {
       lastError.value = e?.message ?? String(e)
@@ -64,9 +61,8 @@ export const useLspStore = defineStore('lsp', () => {
   }
   const updateSettings = async (options: SessionOptions, initialFiles: Record<string, string>) => {
     if (!client.value) return
-    const cfgText = await readConfigText()
-    const seeded = { ...initialFiles, [CONFIG_PATH]: cfgText }
-    await client.value.updateSettings(options, seeded)
+    // initialFiles should already contain CONFIG_PATH if needed
+    await client.value.updateSettings(options, initialFiles)
   }
 
   return {

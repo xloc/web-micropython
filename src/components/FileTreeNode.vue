@@ -15,8 +15,11 @@
         {{ node.name }}
       </span>
 
-      <!-- File size for files -->
-      <span v-if="node.type === 'file'" class="text-xs text-zinc-500">
+      <!-- Read-only indicator -->
+      <LockClosedIcon v-if="node.readonly" class="size-4 text-zinc-500" title="Read-only" />
+
+      <!-- File size for files (not readonly) -->
+      <span v-if="node.type === 'file' && !node.readonly" class="text-xs text-zinc-500">
         {{ formatFileSize(node.size) }}
       </span>
     </div>
@@ -24,14 +27,18 @@
     <!-- Context Menu -->
     <div v-if="showContextMenu" :style="contextMenuStyle"
       class="fixed bg-white border border-zinc-300 rounded shadow-lg py-1 z-50 min-w-32" @click.stop>
-      <button @click="handleRename"
+      <button v-if="!node.readonly" @click="handleRename"
         class="w-full text-left px-3 py-1 text-sm hover:bg-zinc-100 flex items-center gap-2">
         ✏️ Rename
       </button>
-      <button @click="handleDelete"
+      <button v-if="!node.readonly" @click="handleDelete"
         class="w-full text-left px-3 py-1 text-sm hover:bg-zinc-100 text-red-600 flex items-center gap-2">
         🗑️ Delete
       </button>
+      <div v-if="node.readonly" class="px-3 py-1 text-sm text-zinc-500 flex items-center gap-2">
+        <LockClosedIcon class="size-4" />
+        Read-only
+      </div>
     </div>
 
     <!-- Children (if directory is expanded) -->
@@ -44,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { LockClosedIcon } from '@heroicons/vue/16/solid'
 import { useWorkspaceStore } from '../stores/workspace'
 import type { FileNode } from '../stores/workspace'
 import FileIcon from './FileIcon.vue'

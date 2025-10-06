@@ -6,7 +6,7 @@
       <div class="flex items-center h-full overflow-x-auto hide-scrollbar">
         <div v-for="file in workspaceStore.openTabs" :key="file.path"
           class="flex items-center px-2 py-1 h-full border-r border-zinc-800 cursor-pointer group gap-2" :class="{
-            'bg-zinc-800': workspaceStore.activePath === file.path,
+            'bg-zinc-900': workspaceStore.activePath === file.path,
             'bg-zinc-700': workspaceStore.activePath !== file.path
           }" @click="switchToFile(file.path)">
           <FileIcon :fileName="getFileName(file.path)" class="size-4" />
@@ -14,16 +14,24 @@
 
           <!-- Combined status/close area -->
           <div class="size-4 flex items-center justify-center ">
+            <!-- Lock indicator (shown for readonly files, hidden on hover) -->
+            <div v-if="file.readonly"
+              class="flex items-center justify-center group-hover:hidden" title="Read-only">
+              <LockClosedIcon class="size-4 text-zinc-400" />
+            </div>
+
             <!-- Save status dot (shown when file is dirty and not hovering on inactive tabs) -->
-            <div v-if="file.isDirty && !(workspaceStore.activePath === file.path)"
+            <div v-if="file.isDirty && !file.readonly && !(workspaceStore.activePath === file.path)"
               class="flex items-center justify-center group-hover:hidden" title="Unsaved changes">
               <div class="size-2 bg-zinc-400 rounded-full" />
             </div>
 
-            <!-- Close button (always shown for active file, shown on hover for others) -->
+            <!-- Close button (for readonly: shown on hover; for normal: always shown when active, shown on hover for others) -->
             <button @click.stop="closeFile(file.path)" :class="[
               'size-5 -mx-0.5 items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 rounded',
-              workspaceStore.activePath === file.path ? 'flex' : 'hidden group-hover:flex'
+              file.readonly
+                ? 'hidden group-hover:flex'
+                : (workspaceStore.activePath === file.path ? 'flex' : 'hidden group-hover:flex')
             ]" title="Close">
               <XMarkIcon class="size-4" />
             </button>
@@ -87,8 +95,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch, shallowRef, ref } from 'vue'
-import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon } from '@heroicons/vue/20/solid'
+import { onMounted, watch, shallowRef, ref, computed } from 'vue'
+import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -123,7 +131,7 @@ const getFileName = (path: string): string => {
   return parts[parts.length - 1] || ''
 }
 
-const editorOptions = {
+const editorOptions = computed(() => ({
   theme: 'vs-dark',
   fontSize: 14,
   fontFamily: 'Monaco, "Cascadia Code", "Roboto Mono", monospace',
@@ -140,12 +148,12 @@ const editorOptions = {
   contextmenu: true,
   selectOnLineNumbers: true,
   roundedSelection: false,
-  readOnly: false,
+  readOnly: workspaceStore.activeDoc?.readonly ?? false,
   cursorStyle: 'line' as const,
   cursorBlinking: 'blink' as const,
   tabSize: 4,
   insertSpaces: true
-}
+}))
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
@@ -154,7 +162,12 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   // Set initial content from active file if available
   const activeFile = workspaceStore.activeDoc
   if (activeFile) {
-    // Initialize LSP with any open files
+    // Wait for workspace to be initialized
+    if (!workspaceStore.initialized) {
+      await workspaceStore.init()
+    }
+
+    // Initialize LSP with any open files including config
     const initialFiles: Record<string, string> = {}
     for (const f of workspaceStore.openTabs) {
       initialFiles[f.path] = f.content
