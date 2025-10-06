@@ -50,6 +50,7 @@ import {
   createMessageConnection,
 } from 'vscode-languageserver-protocol';
 import { getPyrightVersions, packageName } from './sessionManager';
+import { loadMicropythonStubs } from './micropythonStubs';
 import type { SessionOptions } from './sessionManager';
 
 const rootPath = '/sync-root/';
@@ -133,7 +134,11 @@ export class LspClient {
     this.connection.listen();
 
     // Initialize the server
-    const files: Record<string, string> = {};
+    // Load built-in MicroPython stubs (e.g., machine) so imports resolve
+    // without requiring any user files in /sync-root.
+    const micropythonStubFiles = await loadMicropythonStubs();
+
+    const files: Record<string, string> = { ...micropythonStubFiles };
     // seed open docs
     for (const doc of this._documents.values()) {
       files[fromUri(doc.uri)] = doc.text;
@@ -141,11 +146,24 @@ export class LspClient {
     // pyright config at /sync-root: prefer provided config text when available
     const configKey = `${rootPath}pyrightconfig.json`;
     const providedConfigText = initialFiles?.[configKey];
-    const defaultConfigText = JSON.stringify({
-      typeshedPath: '/typeshed',
-      ...(sessionOptions?.configOverrides ?? {}),
-    });
-    files[configKey] = providedConfigText ?? defaultConfigText;
+    // Start with a minimal default; we'll patch in stubPath/typeshedPath as needed
+    let cfgObj: any = { typeshedPath: '/typeshed' };
+    try {
+      if (providedConfigText) cfgObj = JSON.parse(providedConfigText);
+    } catch {
+      // ignore parse errors and fall back to default
+    }
+
+    // Ensure our stub path is available so /typings is searched.
+    if (!cfgObj.stubPath) cfgObj.stubPath = '/typings';
+    // Ensure a typeshed path (even if unused by our stubs)
+    if (!cfgObj.typeshedPath) cfgObj.typeshedPath = '/typeshed';
+    // Apply any runtime overrides last
+    if (sessionOptions?.configOverrides) {
+      cfgObj = { ...cfgObj, ...sessionOptions.configOverrides };
+    }
+
+    files[configKey] = JSON.stringify(cfgObj, null, 2);
 
     const init: InitializeParams = {
       rootUri,
