@@ -146,7 +146,7 @@ export class LspClient {
     // pyright config at /sync-root: prefer provided config text when available
     const configKey = `${rootPath}pyrightconfig.json`;
     const providedConfigText = initialFiles?.[configKey];
-    // Start with a minimal default; we'll patch in stubPath/typeshedPath as needed
+    // Start with a minimal default; we'll patch in stubPath/typeshedPath and diagnostics as needed
     let cfgObj: any = { typeshedPath: '/typeshed' };
     try {
       if (providedConfigText) cfgObj = JSON.parse(providedConfigText);
@@ -158,12 +158,17 @@ export class LspClient {
     if (!cfgObj.stubPath) cfgObj.stubPath = '/typings';
     // Ensure a typeshed path (even if unused by our stubs)
     if (!cfgObj.typeshedPath) cfgObj.typeshedPath = '/typeshed';
+    // Silence stub-only warning while keeping real missing imports (config-level rule)
+    if (cfgObj.reportMissingModuleSource === undefined) {
+      cfgObj.reportMissingModuleSource = 'none';
+    }
     // Apply any runtime overrides last
     if (sessionOptions?.configOverrides) {
       cfgObj = { ...cfgObj, ...sessionOptions.configOverrides };
     }
 
-    files[configKey] = JSON.stringify(cfgObj, null, 2);
+    const cfgText = JSON.stringify(cfgObj, null, 2);
+    files[configKey] = cfgText;
 
     const init: InitializeParams = {
       rootUri,

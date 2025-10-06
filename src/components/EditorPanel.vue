@@ -1,8 +1,7 @@
 <template>
   <div class="h-full w-full flex flex-col bg-zinc-800">
     <!-- Tab bar - only show when files are open -->
-    <div v-if="workspaceStore.openTabs.length > 0"
-      class="flex items-center justify-between bg-zinc-800 pr-4 h-10">
+    <div v-if="workspaceStore.openTabs.length > 0" class="flex items-center justify-between bg-zinc-800 pr-4 h-10">
       <!-- File tabs -->
       <div class="flex items-center h-full overflow-x-auto hide-scrollbar">
         <div v-for="file in workspaceStore.openTabs" :key="file.path"
@@ -26,7 +25,7 @@
               'size-5 -mx-0.5 items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-600 rounded',
               workspaceStore.activePath === file.path ? 'flex' : 'hidden group-hover:flex'
             ]" title="Close">
-             <XMarkIcon class="size-4" />
+              <XMarkIcon class="size-4" />
             </button>
           </div>
         </div>
@@ -298,7 +297,7 @@ onMounted(async () => {
       await workspaceStore.createFile('/sync-root', 'main.py')
       const activeFile = workspaceStore.activeDoc
       if (activeFile) {
-        workspaceStore.updateFileContent(activeFile.path, '# Welcome to MicroPython Web IDE\nprint("Hello, World!")')
+        workspaceStore.updateFileContent(activeFile.path, '# Welcome to MicroPython Web IDE\nprint("Hello, World!")\n\nfrom machine import Pin\nPin(7, Pin.OUT).on()')
       }
     }
   }, 1000)

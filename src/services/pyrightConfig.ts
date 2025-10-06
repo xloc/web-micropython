@@ -6,6 +6,8 @@ export const defaultConfig = {
   typeshedPath: '/typeshed',
   extraPaths: ['/sync-root'],
   include: ['**/*.py', '**/*.pyi'],
+  // Silence stub-only source resolution warnings (keep real missing-imports)
+  reportMissingModuleSource: 'none',
   executionEnvironments: [
     { root: '/sync-root', extraPaths: ['/sync-root'] },
   ],
@@ -23,4 +25,3 @@ export async function readConfigText(): Promise<string> {
   if (!exists) await ensureConfigFile()
   return await readTextFile(CONFIG_PATH)
 }
-
