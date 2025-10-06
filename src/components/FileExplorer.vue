@@ -37,9 +37,9 @@
         Error: {{ workspaceStore.error }}
       </div>
 
-      <div v-else-if="workspaceStore.fileTree">
-        <FileTreeNode :node="workspaceStore.fileTree" :level="0" @file-click="handleFileClick"
-          @folder-click="handleFolderClick" />
+      <div v-else-if="flattenedTree.length > 0">
+        <FileTreeNode v-for="node in flattenedTree" :key="node.path" :node="node" :level="0"
+          @file-click="handleFileClick" @folder-click="handleFolderClick" />
       </div>
 
       <div v-else class="text-sm p-2">
@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue'
+import { watch, computed } from 'vue'
 import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useSerialStore } from '../stores/serial'
@@ -63,6 +63,11 @@ import type { FileNode } from '../stores/workspace'
 const workspaceStore = useWorkspaceStore()
 const serialStore = useSerialStore()
 const syncStore = useSyncStore()
+
+// Flatten root: show root's children directly instead of showing root folder
+const flattenedTree = computed(() => {
+  return workspaceStore.fileTree?.children || []
+})
 
 // Initialize VFS and load file tree when ready
 watch(
