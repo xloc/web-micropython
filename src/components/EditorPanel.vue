@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch, shallowRef, ref, computed } from 'vue'
+import { onMounted, onUnmounted, watch, shallowRef, ref, computed } from 'vue'
 import { ArrowUpTrayIcon, PlayIcon, LinkIcon, CommandLineIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/20/solid'
 import { useEditorStore } from '../stores/editor'
 import { useSerialStore } from '../stores/serial'
@@ -104,6 +104,7 @@ import type { editor } from 'monaco-editor'
 import { useLspStore } from '../stores/lsp'
 import { toUri } from '../language-server/LspClient'
 import { useMonaco } from '@guolao/vue-monaco-editor'
+import { loadPythonSnippets, registerPythonSnippetProvider, SNIPPET_USER_CANDIDATES } from '../services/snippets'
 import FileIcon from './FileIcon.vue'
 
 const editorStore = useEditorStore()
@@ -115,6 +116,7 @@ const lspStore = useLspStore()
 const editorInstance = shallowRef<editor.IStandaloneCodeEditor | null>(null)
 const isUpdatingProgrammatically = ref(false)
 const { monacoRef } = useMonaco()
+let snippetDisposable: { dispose: () => void } | null = null
 
 // Tab functionality
 const switchToFile = (path: string) => {
@@ -151,7 +153,10 @@ const editorOptions = computed(() => ({
   cursorStyle: 'line' as const,
   cursorBlinking: 'blink' as const,
   tabSize: 4,
-  insertSpaces: true
+  insertSpaces: true,
+  // Snippet-related Monaco options
+  snippetSuggestions: 'top' as const,
+  tabCompletion: 'onlySnippets' as const,
 }))
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
@@ -194,11 +199,33 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
 
   // Store-based language service registration happens automatically
 
+  // Load and register snippets (public + user-defined)
+  try {
+    const openMap: Record<string, string> = {}
+    for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
+    const loaded = await loadPythonSnippets(openMap)
+    if (snippetDisposable) { try { snippetDisposable.dispose() } catch {} }
+    snippetDisposable = monacoRef.value && registerPythonSnippetProvider(monacoRef.value, loaded)
+  } catch {
+    // ignore snippet init errors
+  }
+
   // Add custom keyboard shortcuts
   const m = monacoRef.value
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyR, runCode)
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyU, uploadCode)
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, saveCurrentFile)
+  // Quick reload snippets
+  editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Alt | m.KeyCode.KeyS, async () => {
+    if (!monacoRef.value) return
+    try {
+      const openMap: Record<string, string> = {}
+      for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
+      const loaded = await loadPythonSnippets(openMap)
+      if (snippetDisposable) { try { snippetDisposable.dispose() } catch {} }
+      snippetDisposable = registerPythonSnippetProvider(monacoRef.value, loaded)
+    } catch {}
+  })
 
   // Add blur event listener for auto-save
   editor.onDidBlurEditorText(() => {
@@ -300,6 +327,24 @@ watch(
   }
 )
 
+// Reload snippet provider when user snippet files change (live)
+watch(
+  () => workspaceStore.openTabs.map(t => ({ path: t.path, content: t.content })),
+  async (tabs) => {
+    if (!monacoRef.value) return
+    const relevantChanged = tabs.some(t => SNIPPET_USER_CANDIDATES.includes(t.path))
+    if (!relevantChanged) return
+    try {
+      const openMap: Record<string, string> = {}
+      for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
+      const loaded = await loadPythonSnippets(openMap)
+      if (snippetDisposable) { try { snippetDisposable.dispose() } catch {} }
+      snippetDisposable = registerPythonSnippetProvider(monacoRef.value, loaded)
+    } catch { }
+  },
+  { deep: true }
+)
+
 // Initialize with a default file if nothing is open
 onMounted(async () => {
   // Wait a bit for file system to initialize
@@ -313,6 +358,10 @@ onMounted(async () => {
       }
     }
   }, 1000)
+})
+
+onUnmounted(() => {
+  try { snippetDisposable?.dispose() } catch {}
 })
 
 </script>

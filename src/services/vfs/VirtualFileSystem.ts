@@ -16,7 +16,7 @@ export class VirtualFileSystem implements VFS {
    * Resolve which backend handles a given path
    */
   private resolveBackend(path: string): VFSBackend {
-    if (path.startsWith('/stubs/') || path === '/stubs') {
+    if (path.startsWith('/stubs/') || path === '/stubs' || path.startsWith('/snippets/') || path === '/snippets') {
       return this.publicBackend
     }
     if (path.startsWith('/sync-root/') || path === '/sync-root') {
@@ -113,6 +113,14 @@ export class VirtualFileSystem implements VFS {
         {
           name: 'stubs',
           path: '/stubs',
+          type: 'directory',
+          size: 0,
+          lastModified: new Date(),
+          readonly: true,
+        },
+        {
+          name: 'snippets',
+          path: '/snippets',
           type: 'directory',
           size: 0,
           lastModified: new Date(),

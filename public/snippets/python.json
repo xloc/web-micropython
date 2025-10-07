@@ -1,0 +1,53 @@
+{
+  "print": {
+    "prefix": "print",
+    "body": "print(${1:msg})",
+    "description": "Print a value"
+  },
+  "for loop": {
+    "prefix": "for",
+    "body": [
+      "for ${1:i} in ${2:range(10)}:",
+      "    ${3:pass}"
+    ],
+    "description": "For loop"
+  },
+  "function": {
+    "prefix": "def",
+    "body": [
+      "def ${1:name}(${2:args}):",
+      "    \"\"\"${3:doc}\"\"\"",
+      "    ${4:pass}"
+    ],
+    "description": "Function definition"
+  },
+  "if main": {
+    "prefix": "ifmain",
+    "body": [
+      "if __name__ == '__main__':",
+      "    ${1:main()}"
+    ],
+    "description": "if __name__ == '__main__' guard"
+  },
+  "class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name}:",
+      "    def __init__(self, ${2:args}):",
+      "        ${3:pass}"
+    ],
+    "description": "Class definition"
+  },
+  "micropython pin": {
+    "prefix": [
+      "pin",
+      "Pin"
+    ],
+    "body": [
+      "from machine import Pin",
+      "${1:led} = Pin(${2:7}, Pin.OUT)",
+      "${1:led}.on()"
+    ],
+    "description": "MicroPython Pin setup"
+  }
+}

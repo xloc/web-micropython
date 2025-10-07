@@ -1,0 +1,41 @@
+{
+  "m5stack-nanoc6": {
+    "prefix": "board:m5stack-nanoc6",
+    "body": [
+      "from neopixel import NeoPixel",
+      "from machine import Pin",
+      "\n",
+      "rgb_pwr = Pin(19, Pin.OUT)",
+      "rgb = NeoPixel(Pin(20, Pin.OUT), 1)",
+      "blue_led = Pin(7, Pin.OUT)",
+      "ir_led = Pin(3, Pin.OUT)",
+      "",
+      "btn = Pin(9, Pin.IN) # pulled HI"
+    ],
+    "description": "Hardware pin setup for M5Stack NanoC6"
+  },
+  "m5stack-capsules3": {
+    "prefix": "board:m5stack-capsules3",
+    "body": [
+      "from neopixel import NeoPixel",
+      "from machine import Pin",
+      "\n",
+      "hold = Pin(46, Pin.OUT).value(1) # HOLD=1 to keep powered",
+      "",
+      "btn_g0 = Pin(0, Pin.IN)",
+      "rgb = NeoPixel(Pin(21, Pin.OUT), 1)"
+    ],
+    "description": "Hardware pin setup for M5Stack CapsuleS3"
+  },
+  "m5stack-atoms3": {
+    "prefix": "board:m5stack-atoms3",
+    "body": [
+      "from machine import Pin",
+      "\n",
+      "ir_led = Pin(4, Pin.OUT)",
+      "btn = Pin(41, Pin.IN) # pulled HI",
+      "green_led = Pin(0, Pin.OUT)"
+    ],
+    "description": "Hardware pin setup for M5Stack AtomS3 (variant)"
+  }
+}
