@@ -1,5 +1,6 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { useLocalStorage } from '@vueuse/core'
 import { useLspStore } from './lsp'
 import { CONFIG_PATH, defaultConfig } from '../services/pyrightConfig'
 import { createVFS, type VFS, type VFSFile } from '../services/vfs'
@@ -31,10 +32,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const projectRoot = ref('/')
   const fileTree = ref<FileNode | null>(null)
   const openTabs = ref<OpenTab[]>([])
-  const activePath = ref<string | null>(null)
+  const activePath = useLocalStorage<string | null>('workspace-active-path', null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const initialized = ref(false)
+
+  // LocalStorage for persisting open tab paths (content restored from VFS)
+  const savedTabPaths = useLocalStorage<string[]>('workspace-open-tabs', [])
 
   // Computed
   const activeDoc = computed(() =>
@@ -61,6 +65,36 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return node
   }
 
+  // Sync open tab paths to localStorage
+  watch(
+    () => openTabs.value.map(t => t.path),
+    (paths) => {
+      savedTabPaths.value = paths
+    },
+    { deep: true }
+  )
+
+  // Restore tabs from localStorage
+  const restoreTabsFromStorage = async () => {
+    if (!vfs) return
+
+    try {
+      // Restore tabs by reopening files from VFS
+      for (const path of savedTabPaths.value) {
+        if (await vfs.exists(path)) {
+          await openFile(path)
+        }
+      }
+
+      // Restore active path if it's in the restored tabs
+      if (activePath.value && !openTabs.value.some(t => t.path === activePath.value)) {
+        activePath.value = null
+      }
+    } catch (e) {
+      console.warn('Failed to restore tabs from localStorage:', e)
+    }
+  }
+
   // Initialize VFS
   const init = async () => {
     if (initialized.value) return
@@ -74,6 +108,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
 
       initialized.value = true
+
+      // Restore previously opened tabs
+      await restoreTabsFromStorage()
     } catch (e: any) {
       error.value = `Failed to initialize VFS: ${e.message}`
       console.error('Failed to initialize VFS:', e)
