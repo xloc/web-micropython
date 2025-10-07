@@ -15,9 +15,8 @@
           <!-- Combined status/close area -->
           <div class="size-4 flex items-center justify-center ">
             <!-- Lock indicator (shown for readonly files, hidden on hover) -->
-            <div v-if="file.readonly"
-              class="flex items-center justify-center group-hover:hidden" title="Read-only">
-              <LockClosedIcon class="size-4 text-zinc-400" />
+            <div v-if="file.readonly" class="flex items-center justify-center group-hover:hidden" title="Read-only">
+              <LockClosedIcon class="size-3 text-zinc-400" />
             </div>
 
             <!-- Save status dot (shown when file is dirty and not hovering on inactive tabs) -->
