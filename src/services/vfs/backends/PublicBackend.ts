@@ -1,17 +1,17 @@
 /**
  * Public Resource Backend for VFS
- * Provides read-only access to static files in /public via HTTP fetch
+ * Provides read-only access to static asset files via Vite's import system
  */
 
 import type { VFSBackend, VFSFile, VFSStats } from '../types'
 
-// Vite's import.meta.glob discovers public assets at build time
-const stubFiles = import.meta.glob('/micropython-stubs/**/*.pyi', {
+// Vite's import.meta.glob discovers assets from src/assets at build time
+const stubFiles = import.meta.glob('/src/assets/micropython-stubs/**/*.pyi', {
   eager: true,
   query: '?url',
   import: 'default',
 })
-const snippetFiles = import.meta.glob('/snippets/**/*', {
+const snippetFiles = import.meta.glob('/src/assets/snippets/**/*', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -27,9 +27,9 @@ export class PublicBackend implements VFSBackend {
     this.dirList = new Set<string>()
 
     // Convert stub glob paths to VFS paths
-    // /micropython-stubs/machine.pyi -> /stubs/machine.pyi
+    // /src/assets/micropython-stubs/machine.pyi -> /stubs/machine.pyi
     for (const globPath of Object.keys(stubFiles)) {
-      const vfsPath = globPath.replace('/micropython-stubs', '/stubs')
+      const vfsPath = globPath.replace('/src/assets/micropython-stubs', '/stubs')
       this.fileList.add(vfsPath)
       const parts = vfsPath.split('/').filter(Boolean)
       for (let i = 1; i < parts.length; i++) {
@@ -39,9 +39,9 @@ export class PublicBackend implements VFSBackend {
     }
 
     // Convert snippet glob paths to VFS paths
-    // /snippets/python.json -> /snippets/python.json
+    // /src/assets/snippets/python.json -> /snippets/python.json
     for (const globPath of Object.keys(snippetFiles)) {
-      const vfsPath = globPath // Already in correct format
+      const vfsPath = globPath.replace('/src/assets', '')
       this.fileList.add(vfsPath)
       const parts = vfsPath.split('/').filter(Boolean)
       for (let i = 1; i < parts.length; i++) {
@@ -63,12 +63,19 @@ export class PublicBackend implements VFSBackend {
     return false
   }
 
-  private toPublicUrl(path: string): string {
-    // /stubs/machine.pyi -> /micropython-stubs/machine.pyi
-    if (path.startsWith('/stubs/')) return path.replace('/stubs', '/micropython-stubs')
-    // /snippets/python.json -> /snippets/python.json
-    if (path.startsWith('/snippets/')) return path
-    return path
+  private getAssetUrl(path: string): string | null {
+    // Convert VFS path back to glob path to look up the URL
+    // /stubs/machine.pyi -> /src/assets/micropython-stubs/machine.pyi
+    if (path.startsWith('/stubs/')) {
+      const globPath = path.replace('/stubs', '/src/assets/micropython-stubs')
+      return stubFiles[globPath] as string || null
+    }
+    // /snippets/python.json -> /src/assets/snippets/python.json
+    if (path.startsWith('/snippets/')) {
+      const globPath = `/src/assets${path}`
+      return snippetFiles[globPath] as string || null
+    }
+    return null
   }
 
   async exists(path: string): Promise<boolean> {
@@ -103,7 +110,11 @@ export class PublicBackend implements VFSBackend {
       throw new Error(`File not found: ${path}`)
     }
 
-    const url = this.toPublicUrl(path)
+    const url = this.getAssetUrl(path)
+    if (!url) {
+      throw new Error(`No URL mapping for ${path}`)
+    }
+
     const response = await fetch(url)
 
     if (!response.ok) {

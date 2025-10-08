@@ -1,25 +1,28 @@
-// Loads MicroPython stub files (from /micropython-stubs) and
+// Loads MicroPython stub files (from src/assets/micropython-stubs) and
 // maps them into the LSP's virtual filesystem under /typings.
 // This makes modules like `machine` available to Pyright without
 // requiring any files in the user's /sync-root workspace.
 
+// Vite's import.meta.glob auto-discovers stubs and provides fetchable URLs
+const stubUrls = import.meta.glob('/src/assets/micropython-stubs/**/*.pyi', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+
 export async function loadMicropythonStubs(): Promise<Record<string, string>> {
   try {
-    const manifestUrl = '/micropython-stubs/manifest.json';
-    const res = await fetch(manifestUrl);
-    if (!res.ok) return {};
-
-    const manifest = (await res.json()) as { files: string[] };
-    if (!manifest?.files || !Array.isArray(manifest.files)) return {};
+    const files: Record<string, string> = {};
 
     const entries = await Promise.all(
-      manifest.files.map(async (relPath) => {
-        const url = `/micropython-stubs/${relPath}`;
+      Object.entries(stubUrls).map(async ([globPath, url]) => {
         try {
-          const r = await fetch(url);
+          const r = await fetch(url as string);
           if (!r.ok) return null;
           const text = await r.text();
-          // Mount under /typings so pyright can find them via stubPath
+          // Convert glob path to VFS path
+          // /src/assets/micropython-stubs/machine.pyi -> /typings/machine.pyi
+          const relPath = globPath.replace('/src/assets/micropython-stubs/', '');
           const vfsPath = `/typings/${relPath}`;
           return [vfsPath, text] as const;
         } catch {
@@ -28,7 +31,6 @@ export async function loadMicropythonStubs(): Promise<Record<string, string>> {
       })
     );
 
-    const files: Record<string, string> = {};
     for (const e of entries) {
       if (!e) continue;
       const [path, content] = e;
