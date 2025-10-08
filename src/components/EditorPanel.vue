@@ -157,11 +157,42 @@ const editorOptions = computed(() => ({
   // Snippet-related Monaco options
   snippetSuggestions: 'top' as const,
   tabCompletion: 'onlySnippets' as const,
+  // Enable semantic highlighting
+  'semanticHighlighting.enabled': true,
 }))
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
   if (!monacoRef.value) return;
+
+  // Define custom theme with semantic token coloring rules
+  monacoRef.value.editor.defineTheme('python-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      // Semantic token coloring (matching VS Code Dark+ theme)
+      { token: 'class', foreground: '4EC9B0' },
+      { token: 'type', foreground: '4EC9B0' },
+      { token: 'function', foreground: 'DCDCAA' },
+      { token: 'method', foreground: 'DCDCAA' },
+      { token: 'variable', foreground: '9CDCFE' },
+      { token: 'parameter', foreground: '9CDCFE' },
+      { token: 'property', foreground: '9CDCFE' },
+      { token: 'namespace', foreground: '4EC9B0' },
+      { token: 'enum', foreground: '4EC9B0' },
+      { token: 'enumMember', foreground: 'B5CEA8' },
+      { token: 'typeParameter', foreground: '4EC9B0' },
+      { token: 'keyword', foreground: 'C586C0' },
+      { token: 'decorator', foreground: 'DCDCAA' },
+      // Custom Pyright tokens
+      { token: 'selfParameter', foreground: '569CD6' },
+      { token: 'clsParameter', foreground: '569CD6' },
+      // Modifiers
+      { token: 'builtin', foreground: '569CD6' },
+    ],
+    colors: {}
+  })
+  monacoRef.value.editor.setTheme('python-dark')
 
   // Set initial content from active file if available
   const activeFile = workspaceStore.activeDoc
