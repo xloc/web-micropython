@@ -6,13 +6,15 @@
 import type { VFSBackend, VFSFile, VFSStats } from '../types'
 
 // Vite's import.meta.glob discovers public assets at build time
-const stubFiles = import.meta.glob('/public/micropython-stubs/**/*.pyi', {
+const stubFiles = import.meta.glob('/micropython-stubs/**/*.pyi', {
   eager: true,
-  as: 'url',
+  query: '?url',
+  import: 'default',
 })
-const snippetFiles = import.meta.glob('/public/snippets/**/*', {
+const snippetFiles = import.meta.glob('/snippets/**/*', {
   eager: true,
-  as: 'url',
+  query: '?url',
+  import: 'default',
 })
 
 export class PublicBackend implements VFSBackend {
@@ -25,9 +27,9 @@ export class PublicBackend implements VFSBackend {
     this.dirList = new Set<string>()
 
     // Convert stub glob paths to VFS paths
-    // /public/micropython-stubs/machine.pyi -> /stubs/machine.pyi
+    // /micropython-stubs/machine.pyi -> /stubs/machine.pyi
     for (const globPath of Object.keys(stubFiles)) {
-      const vfsPath = globPath.replace('/public/micropython-stubs', '/stubs')
+      const vfsPath = globPath.replace('/micropython-stubs', '/stubs')
       this.fileList.add(vfsPath)
       const parts = vfsPath.split('/').filter(Boolean)
       for (let i = 1; i < parts.length; i++) {
@@ -37,9 +39,9 @@ export class PublicBackend implements VFSBackend {
     }
 
     // Convert snippet glob paths to VFS paths
-    // /public/snippets/python.json -> /snippets/python.json
+    // /snippets/python.json -> /snippets/python.json
     for (const globPath of Object.keys(snippetFiles)) {
-      const vfsPath = globPath.replace('/public/snippets', '/snippets')
+      const vfsPath = globPath // Already in correct format
       this.fileList.add(vfsPath)
       const parts = vfsPath.split('/').filter(Boolean)
       for (let i = 1; i < parts.length; i++) {
