@@ -1,72 +1,126 @@
 <template>
-  <div class="h-full flex flex-col group">
-    <!-- Header -->
-    <div class="flex items-center justify-between px-3 h-10 bg-zinc-800">
-      <h3 class="text-sm font-medium text-gray-400">Explorer</h3>
-      <button
-        @click="syncProject"
-        :disabled="!serialStore.isConnected || syncStore.isSyncing"
-        class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
-        title="Sync to Device">
-        <ArrowUpTrayIcon class="size-4" />
-      </button>
+  <div class="h-full flex flex-col">
+    <div v-if="workspaceStore.loading" class="text-sm text-gray-500 p-2">
+      Loading...
     </div>
 
-    <!-- Actions -->
-    <div class="bg-zinc-900 text-zinc-400 pr-3">
-      <div class="flex gap-0.5 justify-end invisible group-hover:visible">
-        <button @click="createNewFile" class="p-1 hover:bg-zinc-700" title="New File">
-          <DocumentPlusIcon class="size-4" />
-        </button>
-        <button @click="createNewFolder" class="p-1 hover:bg-zinc-700" title="New Folder">
-          <FolderPlusIcon class="size-4" />
-        </button>
-        <button @click="refreshFileTree" class="p-1 hover:bg-zinc-700" title="Refresh">
-          <ArrowPathIcon class="size-4" />
-        </button>
-      </div>
+    <div v-else-if="workspaceStore.error" class="text-sm text-red-600 p-2">
+      Error: {{ workspaceStore.error }}
     </div>
 
-    <!-- File Tree -->
-    <div class="flex-1 overflow-auto bg-zinc-800 text-zinc-300">
-      <div v-if="workspaceStore.loading" class="text-sm text-gray-500 p-2">
-        Loading...
+    <template v-else>
+      <!-- Header -->
+      <div class="flex items-center justify-between px-3 h-10 bg-zinc-800">
+        <h3 class="text-sm font-medium text-gray-400">Explorer</h3>
+        <button @click="syncProject" :disabled="!serialStore.isConnected || syncStore.isSyncing"
+          class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
+          title="Sync to Device">
+          <ArrowUpTrayIcon class="size-4" />
+        </button>
       </div>
 
-      <div v-else-if="workspaceStore.error" class="text-sm text-red-600 p-2">
-        Error: {{ workspaceStore.error }}
+      <!-- SYNC-ROOT section -->
+      <div class="bg-zinc-800 text-zinc-400 flex flex-col h-full">
+        <!-- Sync Root header row with actions on the right -->
+        <div class="flex items-center justify-between px-1 h-6 flex-none group">
+          <button class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide select-none"
+            @click="showSyncRoot = !showSyncRoot" title="Toggle sync-root section">
+            <component :is="showSyncRoot ? ChevronDownIcon : ChevronRightIcon" class="size-4" />
+            <span>Sync Root</span>
+          </button>
+          <div class="flex gap-0.5 invisible group-hover:visible">
+            <button @click="createNewFile" class="p-1 hover:bg-zinc-700" title="New File">
+              <DocumentPlusIcon class="size-4" />
+            </button>
+            <button @click="createNewFolder" class="p-1 hover:bg-zinc-700" title="New Folder">
+              <FolderPlusIcon class="size-4" />
+            </button>
+            <button @click="refreshFileTree" class="p-1 hover:bg-zinc-700" title="Refresh">
+              <ArrowPathIcon class="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Sync Root content (flattened files) -->
+        <div v-if="showSyncRoot" class="flex-1">
+          <div v-if="sortedSyncRootFiles.length > 0">
+            <FileTreeNode v-for="node in sortedSyncRootFiles" :key="node.path" :node="node" :level="0"
+              @file-click="handleFileClick" @folder-click="handleFolderClick" />
+          </div>
+          <div v-else class="text-sm text-zinc-400 px-3 py-1.5">Empty</div>
+        </div>
+
+        <!-- Other header row (no actions) -->
+        <div class="flex items-center justify-between px-1 h-6 border-t border-zinc-600 flex-none">
+          <button class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide select-none"
+            @click="showOther = !showOther" title="Toggle other section">
+            <component :is="showOther ? ChevronDownIcon : ChevronRightIcon" class="size-4" />
+            <span>Other</span>
+          </button>
+          <div class="w-6" />
+        </div>
+
+        <!-- Other content (stubs, snippets, ...) -->
+        <div v-if="showOther">
+          <div v-if="otherNodes.length > 0">
+            <FileTreeNode v-for="node in sortedOtherNodes" :key="node.path" :node="node" :level="0"
+              @file-click="handleFileClick" @folder-click="handleFolderClick" />
+          </div>
+          <div v-else class="text-sm text-zinc-400 px-3 py-1.5">Empty</div>
+        </div>
       </div>
 
-      <div v-else-if="flattenedTree.length > 0">
-        <FileTreeNode v-for="node in flattenedTree" :key="node.path" :node="node" :level="0"
-          @file-click="handleFileClick" @folder-click="handleFolderClick" />
+      <!-- File Tree -->
+      <div class="flex-1 overflow-auto bg-zinc-800 text-zinc-300">
       </div>
-
-      <div v-else class="text-sm p-2">
-        No files found
-      </div>
-    </div>
-
+    </template>
 
   </div>
 </template>
 
 <script setup lang="ts">
 import { watch, computed } from 'vue'
-import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon } from '@heroicons/vue/16/solid'
+import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useSerialStore } from '../stores/serial'
 import { useSyncStore } from '../stores/sync'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/workspace'
+import { getAllFiles } from '../utils/fileTree'
 
 const workspaceStore = useWorkspaceStore()
 const serialStore = useSerialStore()
 const syncStore = useSyncStore()
 
-// Flatten root: show root's children directly instead of showing root folder
-const flattenedTree = computed(() => {
-  return workspaceStore.fileTree?.children || []
+// Root children under '/'
+const rootChildren = computed(() => workspaceStore.fileTree?.children || [])
+
+// Sync-root node and its children/files
+const syncRootNode = computed(() => rootChildren.value.find(n => n.path === '/sync-root'))
+const syncRootChildren = computed(() => syncRootNode.value?.children || [])
+const syncRootFilesFlat = computed((): FileNode[] => {
+  if (!syncRootNode.value) return []
+  return getAllFiles(syncRootNode.value)
+})
+
+// All other top-level nodes (e.g., stubs, snippets, ...)
+// Explicitly exclude anything under /sync-root and only show directories
+const otherNodes = computed(() => rootChildren.value.filter(n => n.type === 'directory' && !n.path.startsWith('/sync-root')))
+
+// Collapsible section state
+import { ref as vueRef } from 'vue'
+const showSyncRoot = vueRef(true)
+const showOther = vueRef(true)
+
+// Sorting helpers for top-level entries to match directory-first alphabetical
+const sortedSyncRootFiles = computed(() => {
+  return [...syncRootFilesFlat.value].sort((a, b) => a.name.localeCompare(b.name))
+})
+const sortedOtherNodes = computed(() => {
+  return [...otherNodes.value].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
 })
 
 // Recursively find and expand nodes along a path
@@ -90,8 +144,9 @@ const expandPathInTree = (nodes: FileNode[], targetPath: string): boolean => {
 watch(
   () => workspaceStore.activePath,
   (newPath) => {
-    if (newPath && flattenedTree.value.length > 0) {
-      expandPathInTree(flattenedTree.value, newPath)
+    if (newPath && rootChildren.value.length > 0) {
+      // Expand through the unified root tree; sections render same nodes
+      expandPathInTree(rootChildren.value, newPath)
     }
   }
 )
