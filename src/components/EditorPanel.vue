@@ -118,6 +118,14 @@ const isUpdatingProgrammatically = ref(false)
 const { monacoRef } = useMonaco()
 let snippetDisposable: { dispose: () => void } | null = null
 
+// Keyboard event handler to prevent default browser behaviors
+const handleKeyDown = (e: KeyboardEvent) => {
+  // Prevent default print dialog on Cmd/Ctrl+P
+  if ((e.metaKey || e.ctrlKey) && e.key === 'p' && !e.shiftKey) {
+    e.preventDefault()
+  }
+}
+
 // Debounce utility with saveNow functionality
 const createDebouncedSave = (wait: number) => {
   let timeoutId: number | null = null
@@ -285,6 +293,10 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyR, runCode)
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyU, uploadCode)
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, saveCurrentFile)
+  // Add Cmd/Ctrl+Shift+P for command palette (in addition to F1)
+  editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyP, () => {
+    editor.trigger('keyboard', 'editor.action.quickCommand', null)
+  })
   // Quick reload snippets
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Alt | m.KeyCode.KeyS, async () => {
     if (!monacoRef.value) return
@@ -421,6 +433,9 @@ watch(
 
 // Initialize with a default file if nothing is open
 onMounted(async () => {
+  // Add global keyboard event listener
+  window.addEventListener('keydown', handleKeyDown)
+
   // Wait a bit for file system to initialize
   setTimeout(async () => {
     if (workspaceStore.openTabs.length === 0) {
@@ -435,6 +450,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // Remove global keyboard event listener
+  window.removeEventListener('keydown', handleKeyDown)
+
   // Cancel any pending auto-save
   debouncedSave.cancel()
 
