@@ -66,6 +66,23 @@ function collectFiles(node: FileNode): FileNode[] {
   return files
 }
 
+function findSyncRoot(tree: FileNode): FileNode | null {
+  // Look for /sync-root directory in the tree
+  if (tree.path === '/sync-root') return tree
+
+  if (tree.children) {
+    for (const child of tree.children) {
+      if (child.path === '/sync-root' && child.type === 'directory') {
+        return child
+      }
+      const found = findSyncRoot(child)
+      if (found) return found
+    }
+  }
+
+  return null
+}
+
 function dirsFromFiles(files: { path: string }[]): string[] {
   const dirPaths = new Set<string>()
   for (const f of files) {
@@ -99,8 +116,12 @@ export const useSyncStore = defineStore('sync', () => {
     const ws = useWorkspaceStore()
     if (!ws.fileTree) throw new Error('No workspace file tree')
 
-    // Collect files from tree
-    const files = collectFiles(ws.fileTree)
+    // Find /sync-root directory
+    const syncRoot = findSyncRoot(ws.fileTree)
+    if (!syncRoot) throw new Error('No /sync-root directory found')
+
+    // Collect files only from /sync-root
+    const files = collectFiles(syncRoot)
 
     // Apply filters (simple placeholder: include all if include empty)
     const filtered = files.filter(() => true)
