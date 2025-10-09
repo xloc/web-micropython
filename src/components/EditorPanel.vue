@@ -118,6 +118,45 @@ const isUpdatingProgrammatically = ref(false)
 const { monacoRef } = useMonaco()
 let snippetDisposable: { dispose: () => void } | null = null
 
+// Debounce utility with saveNow functionality
+const createDebouncedSave = (wait: number) => {
+  let timeoutId: number | null = null
+
+  const saveFunc = async () => {
+    const activeFile = workspaceStore.activeDoc
+    if (activeFile && activeFile.isDirty && !activeFile.readonly) {
+      await workspaceStore.saveFile(activeFile.path)
+    }
+  }
+
+  return {
+    trigger() {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+      }
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null
+        saveFunc()
+      }, wait)
+    },
+
+    cancel() {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+    },
+
+    async saveNow() {
+      this.cancel()
+      await saveFunc()
+    }
+  }
+}
+
+// Auto-save with debounce (750ms delay)
+const debouncedSave = createDebouncedSave(200)
+
 // Tab functionality
 const switchToFile = (path: string) => {
   workspaceStore.activePath = path
@@ -235,7 +274,7 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     const openMap: Record<string, string> = {}
     for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
     const loaded = await loadPythonSnippets(openMap)
-    if (snippetDisposable) { try { snippetDisposable.dispose() } catch {} }
+    if (snippetDisposable) { try { snippetDisposable.dispose() } catch { } }
     snippetDisposable = monacoRef.value && registerPythonSnippetProvider(monacoRef.value, loaded)
   } catch {
     // ignore snippet init errors
@@ -253,9 +292,9 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
       const openMap: Record<string, string> = {}
       for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
       const loaded = await loadPythonSnippets(openMap)
-      if (snippetDisposable) { try { snippetDisposable.dispose() } catch {} }
+      if (snippetDisposable) { try { snippetDisposable.dispose() } catch { } }
       snippetDisposable = registerPythonSnippetProvider(monacoRef.value, loaded)
-    } catch {}
+    } catch { }
   })
 
   // Add blur event listener for auto-save
@@ -277,7 +316,6 @@ const handleContentChange = (value: string) => {
   // Update file system store with new content
   workspaceStore.updateFileContent(activeFile.path, value)
 
-  // OPFS writes happen on explicit save through the store
   // Send change to LSP for current model
   try {
     const model = editorInstance.value?.getModel()
@@ -285,6 +323,9 @@ const handleContentChange = (value: string) => {
       lspStore.changeDocument(model.uri.toString(), value)
     }
   } catch { }
+
+  // Trigger debounced auto-save
+  debouncedSave.trigger()
 }
 
 const runCode = async () => {
@@ -292,13 +333,15 @@ const runCode = async () => {
   const activeFile = workspaceStore.activeDoc
   if (!activeFile) return
 
+  // Save immediately before running
+  await debouncedSave.saveNow()
+
   const session = await serialStore.openSession('run')
   try {
     await session.send(activeFile.content)
   } finally {
     await session.close()
   }
-  await workspaceStore.saveFile(activeFile.path)
 }
 
 const uploadCode = async () => {
@@ -306,20 +349,20 @@ const uploadCode = async () => {
   const activeFile = workspaceStore.activeDoc
   if (!activeFile) return
 
+  // Save immediately before uploading
+  await debouncedSave.saveNow()
+
   const session = await serialStore.openSession('upload')
   try {
     await session.send(activeFile.content)
   } finally {
     await session.close()
   }
-  await workspaceStore.saveFile(activeFile.path)
 }
 
 const saveCurrentFile = async () => {
-  const activeFile = workspaceStore.activeDoc
-  if (activeFile && activeFile.isDirty) {
-    await workspaceStore.saveFile(activeFile.path)
-  }
+  // Save immediately (cancels pending debounced save)
+  await debouncedSave.saveNow()
 }
 
 // Unified watcher: when active path or its content changes, switch model then sync content
@@ -369,7 +412,7 @@ watch(
       const openMap: Record<string, string> = {}
       for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
       const loaded = await loadPythonSnippets(openMap)
-      if (snippetDisposable) { try { snippetDisposable.dispose() } catch {} }
+      if (snippetDisposable) { try { snippetDisposable.dispose() } catch { } }
       snippetDisposable = registerPythonSnippetProvider(monacoRef.value, loaded)
     } catch { }
   },
@@ -392,7 +435,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  try { snippetDisposable?.dispose() } catch {}
+  // Cancel any pending auto-save
+  debouncedSave.cancel()
+
+  try { snippetDisposable?.dispose() } catch { }
 })
 
 </script>
