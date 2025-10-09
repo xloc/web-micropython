@@ -9,6 +9,22 @@ export default defineConfig(({ command }) => ({
   base: command === 'build' ? './' : '/',
   plugins: [vue(), tailwindcss()],
   worker: { format: 'es' },
+  build: {
+    // Reduce chunk size warnings by splitting heavy libs and relaxing the threshold
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('monaco-editor') || id.includes('@guolao/vue-monaco-editor')) return 'monaco'
+            if (id.includes('@xterm')) return 'xterm'
+            if (id.includes('vscode-jsonrpc') || id.includes('vscode-languageserver')) return 'vscode-lsp'
+            return 'vendor'
+          }
+        }
+      }
+    }
+  },
   optimizeDeps: {
     exclude: ['pyodide']
   },

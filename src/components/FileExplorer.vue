@@ -97,7 +97,6 @@ const rootChildren = computed(() => workspaceStore.fileTree?.children || [])
 
 // Sync-root node and its children/files
 const syncRootNode = computed(() => rootChildren.value.find(n => n.path === '/sync-root'))
-const syncRootChildren = computed(() => syncRootNode.value?.children || [])
 const syncRootFilesFlat = computed((): FileNode[] => {
   if (!syncRootNode.value) return []
   return getAllFiles(syncRootNode.value)
