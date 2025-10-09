@@ -106,6 +106,7 @@ import { toUri } from '../language-server/LspClient'
 import { useMonaco } from '@guolao/vue-monaco-editor'
 import { loadPythonSnippets, registerPythonSnippetProvider, SNIPPET_USER_CANDIDATES } from '../services/snippets'
 import FileIcon from './FileIcon.vue'
+import { colorize } from '../utils/terminal'
 
 const editorStore = useEditorStore()
 const serialStore = useSerialStore()
@@ -350,6 +351,7 @@ const runCode = async () => {
 
   const session = await serialStore.openSession('run')
   try {
+    session.writeTerminal(colorize(`[Running ${getFileName(activeFile.path)}]`, 'cyan'))
     await session.send(activeFile.content)
   } finally {
     await session.close()
@@ -366,6 +368,7 @@ const uploadCode = async () => {
 
   const session = await serialStore.openSession('upload')
   try {
+    session.writeTerminal(colorize(`[Uploading ${getFileName(activeFile.path)}]`, 'cyan'))
     await session.send(activeFile.content)
   } finally {
     await session.close()

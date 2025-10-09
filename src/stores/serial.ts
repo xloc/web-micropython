@@ -216,16 +216,24 @@ export const useSerialStore = defineStore('serial', () => {
       onData: (cb: (data: string) => void) => {
         sessionOnData = cb
       },
+      writeTerminal: (message: string) => {
+        // Send message directly to console (bypasses session routing)
+        consoleOnData?.(message)
+      },
       close: async () => {
         try {
           // Wait a bit for output to complete
           await new Promise((r) => setTimeout(r, 100))
+
+          // Restore console routing before exiting raw mode
+          // so the prompt goes to the console
+          sessionActive = false
+
           // Step 7: Exit raw REPL to friendly REPL
           await writeRaw('\x02')
           await new Promise((r) => setTimeout(r, 50))
         } finally {
           sessionOnData = null
-          sessionActive = false
           busy.value = null
           protocolBuffer = new Uint8Array(0)
           protocolBufferActive = false

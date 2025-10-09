@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useWorkspaceStore } from './workspace'
 import type { FileNode } from './workspace'
 import { useSerialStore } from './serial'
+import { colorize } from '../utils/terminal'
 
 type Phase = 'idle' | 'planning' | 'syncing' | 'done' | 'error'
 
@@ -135,6 +136,7 @@ export const useSyncStore = defineStore('sync', () => {
 
       // Open exclusive session (enters raw mode)
       const session = await serial.openSession('sync')
+      session.writeTerminal(colorize(`[Syncing ${computed.filesToUpload.length} files, ${computed.dirsToCreate.length} directories]`, 'cyan'))
 
       const started = Date.now()
       let done = 0
@@ -171,6 +173,8 @@ export const useSyncStore = defineStore('sync', () => {
         bytes += new TextEncoder().encode(content).length
         await delay(30)
       }
+
+      session.writeTerminal(colorize(`[Sync complete: ${computed.filesToUpload.length} files, ${bytes} bytes]`, 'green'))
       await session.close()
 
       // Done
