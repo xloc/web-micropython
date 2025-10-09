@@ -63,6 +63,11 @@ export const useSerialStore = defineStore('serial', () => {
     } finally {
       if (currentReader === reader) currentReader = null
       reader.releaseLock()
+
+      // Fallback: If read loop exits and port still exists, device disconnected
+      if (port.value) {
+        handleUnexpectedDisconnect()
+      }
     }
   }
 
@@ -242,6 +247,17 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  // Set up disconnect event listener (Web Serial API)
+  if ('serial' in navigator) {
+    navigator.serial.addEventListener('disconnect', (event: any) => {
+      // Handle both new API (event.target) and old API (event.port) for Chrome <89
+      const disconnectedPort = event.target || event.port
+      if (disconnectedPort === port.value) {
+        handleUnexpectedDisconnect()
+      }
+    })
+  }
+
   // Connection API
   const connect = async () => {
     try {
@@ -269,18 +285,35 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  // Common cleanup logic
+  const cleanupConnection = () => {
+    if (currentReader) {
+      try { currentReader.cancel() } catch {}
+      currentReader = null
+    }
+    port.value = null
+    busy.value = null
+    sessionActive = false
+    sessionOnData = null
+    protocolBuffer = new Uint8Array(0)
+    protocolBufferActive = false
+  }
+
+  // Manual disconnect (user initiated)
   const disconnect = async () => {
     if (port.value) {
-      if (currentReader) {
-        try { await currentReader.cancel() } catch {}
-        currentReader = null
-      }
-      try { await port.value.close() } catch {}
-      port.value = null
-      busy.value = null
-      sessionOnData = null
-      sessionActive = false
+      const portToClose = port.value
+      cleanupConnection()
+      try { await portToClose.close() } catch {}
     }
+  }
+
+  // Automatic disconnect (device unplugged)
+  const handleUnexpectedDisconnect = () => {
+    if (!port.value) return // Already disconnected
+    cleanupConnection()
+    // Notify user in console
+    consoleOnData?.('\r\n\x1b[31m[Device disconnected]\x1b[0m\r\n')
   }
 
   return {
