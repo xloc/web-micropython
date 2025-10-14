@@ -36,9 +36,23 @@ export async function loadMicropythonStubs(): Promise<Record<string, string>> {
       const [path, content] = e;
       files[path] = content;
     }
+
+    // Add package-style aliases for modules: /typings/pkg/__init__.pyi -> contents of /typings/pkg.pyi
+    // Some tools refer to package form even if only a flat module stub exists.
+    for (const key of Object.keys(files)) {
+      if (key.startsWith('/typings/') && key.endsWith('.pyi')) {
+        const rel = key.replace('/typings/', '')
+        if (!rel.includes('/')) {
+          const mod = rel.replace(/\.pyi$/, '')
+          const pkgInit = `/typings/${mod}/__init__.pyi`
+          if (!(pkgInit in files)) {
+            files[pkgInit] = files[key]
+          }
+        }
+      }
+    }
     return files;
   } catch {
     return {};
   }
 }
-

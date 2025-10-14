@@ -165,6 +165,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  // Open an in-memory file (e.g., stub files) that isn't in the VFS
+  const openInMemoryFile = (path: string, content: string, readonly = true) => {
+    // If file is already open, just switch to it
+    if (openTabs.value.some(t => t.path === path)) {
+      activePath.value = path
+      return
+    }
+
+    openTabs.value.push({
+      path,
+      content,
+      isDirty: false,
+      lastSaved: new Date(),
+      readonly
+    })
+    activePath.value = path
+  }
+
   const closeFile = (path: string) => {
     const idx = openTabs.value.findIndex(t => t.path === path)
     if (idx !== -1) openTabs.value.splice(idx, 1)
@@ -354,6 +372,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     init,
     loadFileTree,
     openFile,
+    openInMemoryFile,
     closeFile,
     saveFile,
     saveAllFiles,

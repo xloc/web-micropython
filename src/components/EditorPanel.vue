@@ -102,7 +102,7 @@ import { useWorkspaceStore } from '../stores/workspace'
 import { useLayoutStore } from '../stores/layout'
 import type { editor } from 'monaco-editor'
 import { useLspStore } from '../stores/lsp'
-import { toUri } from '../language-server/LspClient'
+import { toUri, fromUri } from '../language-server/LspClient'
 import { useMonaco } from '@guolao/vue-monaco-editor'
 import { loadPythonSnippets, registerPythonSnippetProvider, SNIPPET_USER_CANDIDATES } from '../services/snippets'
 import FileIcon from './FileIcon.vue'
@@ -207,11 +207,39 @@ const editorOptions = computed(() => ({
   tabCompletion: 'onlySnippets' as const,
   // Enable semantic highlighting
   'semanticHighlighting.enabled': true,
+  // Prefer jumping over peeking on Cmd/Ctrl+Click
+  'definitionLinkOpensInPeek': false,
+  'gotoLocation.multipleDefinitions': 'goto',
+  'gotoLocation.multipleDeclarations': 'goto',
 }))
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   editorInstance.value = editor
   if (!monacoRef.value) return;
+
+  // Override Monaco's code editor service to handle multi-file navigation
+  // Without this, Go to Definition won't work for files not currently open
+  // See: https://github.com/microsoft/monaco-editor/issues/2402
+  const codeEditorService = (editor as any)._codeEditorService
+  if (codeEditorService) {
+    const openEditorBase = codeEditorService.openCodeEditor.bind(codeEditorService)
+    codeEditorService.openCodeEditor = async (input: any, source: any) => {
+      const result = await openEditorBase(input, source)
+      if (result === null) {
+        // Monaco returned null, meaning it couldn't open the editor
+        // This happens when navigating to a different model
+        // We need to manually switch to the target model
+        const targetModel = monacoRef.value?.editor.getModel(input.resource)
+        if (targetModel) {
+          source.setModel(targetModel)
+          source.setSelection(input.options?.selection || {})
+          source.revealLineInCenter(input.options?.selection?.startLineNumber || 1)
+          return source
+        }
+      }
+      return result
+    }
+  }
 
   // Define custom theme with semantic token coloring rules
   monacoRef.value.editor.defineTheme('python-dark', {
@@ -313,6 +341,36 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   // Add blur event listener for auto-save
   editor.onDidBlurEditorText(() => {
     saveCurrentFile()
+  })
+
+  // When Monaco switches models (e.g., via Go to Definition), sync tabs
+  editor.onDidChangeModel(async () => {
+    const m = editor.getModel()
+    if (!m) return
+    const path = fromUri(m.uri.toString())
+    if (path.startsWith('/sync-root/')) {
+      if (!workspaceStore.openPaths.includes(path)) {
+        await workspaceStore.openFile(path)
+      } else {
+        workspaceStore.activePath = path
+      }
+    } else if (path.startsWith('/typings/') || path.startsWith('/typeshed/')) {
+      // Open stub file as a read-only tab
+      if (!workspaceStore.openPaths.includes(path)) {
+        workspaceStore.openInMemoryFile(path, m.getValue(), true)
+      } else {
+        workspaceStore.activePath = path
+      }
+      // Ensure LSP knows about this stub file
+      try {
+        const uriStr = m.uri.toString()
+        if (!lspStore.hasDocument(uriStr)) {
+          await lspStore.openDocument(uriStr, m.getValue())
+        }
+      } catch (e) {
+        console.warn('[Editor] Failed to open stub/typeshed document in LSP', e)
+      }
+    }
   })
 
   // Focus the editor

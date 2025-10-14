@@ -1,13 +1,88 @@
 import type * as monaco from 'monaco-editor'
-import type { Diagnostic, DiagnosticSeverity, CompletionItem, CompletionList, MarkupContent } from 'vscode-languageserver-types'
-import { LspClient } from './LspClient'
+import type { Diagnostic, DiagnosticSeverity, CompletionItem, CompletionList, MarkupContent, Location, LocationLink } from 'vscode-languageserver-types'
+import { LspClient, fromUri } from './LspClient'
 import { fromRange, toInlayHint, toRange, toSemanticTokens } from 'monaco-languageserver-types'
+import { createVFS } from '../services/vfs'
+import { loadMicropythonStubs } from './micropythonStubs'
 
 let registered = false
 
 export function registerMonacoProviders(monaco: typeof import('monaco-editor'), lspClient: LspClient) {
   if (registered) return
   registered = true
+
+  // Lazily-initialized helpers for fetching file content for target URIs
+  let vfsPromise: Promise<Awaited<ReturnType<typeof createVFS>>> | null = null
+  let stubFilesPromise: Promise<Record<string, string>> | null = null
+
+  const ensureModelForUri = async (uriStr: string) => {
+    const uri = monaco.Uri.parse(uriStr)
+    let model = monaco.editor.getModel(uri)
+    if (model) return
+
+    // Try to load content from VFS or stub bundle
+    const path = fromUri(uriStr)
+    let text: string | null = null
+    if (path.startsWith('/sync-root/')) {
+      try {
+        if (!vfsPromise) vfsPromise = createVFS()
+        const vfs = await vfsPromise
+        text = await vfs.readFile(path)
+      } catch {
+        text = ''
+      }
+    } else if (path.startsWith('/typeshed/')) {
+      // Typeshed stdlib files are bundled inside the Pyright worker but not accessible from the UI thread
+      // Show a placeholder message for Python stdlib modules
+      text = `# Python standard library stubs are not available in this environment.
+#
+# This is a placeholder for: ${path}
+#
+# To see documentation, visit: https://docs.python.org/3/library/
+`
+    } else if (path.startsWith('/typings/')) {
+      try {
+        if (!stubFilesPromise) stubFilesPromise = loadMicropythonStubs()
+        const stubs = await stubFilesPromise
+        text = stubs[path] ?? null
+
+        // Handle common variants for package-style files
+        if (text == null) {
+          // 1) init.pyi (missing underscores) -> __init__.pyi
+          if (/\/init\.pyi$/.test(path) && !/\/__init__\.pyi$/.test(path)) {
+            const altInit = path.replace(/\/init\.pyi$/, '/__init__.pyi')
+            if (stubs[altInit] != null) {
+              text = stubs[altInit]
+            }
+          }
+        }
+
+        if (text == null) {
+          // 2) /typings/pkg/__init__.pyi (or init.pyi) -> /typings/pkg.pyi
+          const m = path.match(/^\/typings\/(.+)\/(?:__)?init\.pyi$/)
+          if (m) {
+            const alt = `/typings/${m[1]}.pyi`
+            if (stubs[alt] != null) {
+              text = stubs[alt]
+            }
+          }
+        }
+
+        if (text == null) text = ''
+      } catch {
+        text = ''
+      }
+    } else {
+      // Unknown scheme/path — create empty model to allow peek UI
+      text = ''
+    }
+
+    try {
+      monaco.editor.createModel(text ?? '', 'python', uri)
+    } catch {
+      // Ignore model creation failures
+    }
+  }
 
   // Hover provider
   monaco.languages.registerHoverProvider('python', {
@@ -23,6 +98,51 @@ export function registerMonacoProviders(monaco: typeof import('monaco-editor'), 
         ],
         range: hover.range ? toRange(hover.range) : undefined,
       }
+    },
+  })
+
+  // Go to definition provider (enables Cmd/Ctrl+Click)
+  monaco.languages.registerDefinitionProvider('python', {
+    provideDefinition: async (model, position) => {
+      const uri = model.uri.toString()
+      const pos = { line: position.lineNumber - 1, character: position.column - 1 }
+      let def = await lspClient.getDefinition(uri, pos)
+      if (!def) {
+        // Try fallbacks in priority order
+        def = (await lspClient.getTypeDefinition(uri, pos))
+          || (await lspClient.getDeclaration(uri, pos))
+          || (await lspClient.getImplementation(uri, pos))
+        if (!def) return null
+      }
+
+      // Normalize to simple Location[] for better compatibility across Monaco versions
+      const locations: monaco.languages.Location[] = []
+      const addLocation = async (uriStr: string, range: any) => {
+        await ensureModelForUri(uriStr)
+        locations.push({ uri: monaco.Uri.parse(uriStr), range: toRange(range) })
+      }
+
+      const defArr = Array.isArray(def) ? (def as any[]) : [def as any]
+
+      if (Array.isArray(defArr)) {
+        for (const d of defArr) {
+          if (d && (d as any).targetUri) {
+            const link = d as LocationLink
+            await addLocation(link.targetUri, link.targetSelectionRange ?? link.targetRange)
+          } else {
+            const loc = d as Location
+            await addLocation(loc.uri, loc.range)
+          }
+        }
+      }
+
+      // Prefer /sync-root and /typings first if multiple results
+      locations.sort((a, b) => {
+        const up = (u: string) => (u.startsWith('file:///sync-root/') ? 0 : u.startsWith('file:///typings/') ? 1 : 2)
+        return up(a.uri.toString()) - up(b.uri.toString())
+      })
+
+      return locations
     },
   })
 

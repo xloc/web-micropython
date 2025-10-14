@@ -28,13 +28,20 @@ import type {
   CompletionItem,
   CompletionList,
   CompletionParams,
+  Definition,
+  DefinitionParams,
+  LocationLink,
   WorkspaceEdit,
   SemanticTokensParams,
   SemanticTokens,
   InlayHintParams,
   InlayHint,
   Range,
+  TypeDefinitionParams,
+  DeclarationParams,
+  ImplementationParams,
 } from 'vscode-languageserver-protocol';
+import { DefinitionRequest, TypeDefinitionRequest, DeclarationRequest, ImplementationRequest } from 'vscode-languageserver-protocol';
 import {
   DiagnosticTag,
   HoverRequest,
@@ -182,6 +189,10 @@ export class LspClient {
             },
             versionSupport: true,
           },
+          definition: { linkSupport: true },
+          typeDefinition: { linkSupport: true },
+          declaration: { linkSupport: true },
+          implementation: { linkSupport: true },
           hover: { contentFormat: ['markdown', 'plaintext'] },
           signatureHelp: {},
         },
@@ -350,6 +361,46 @@ export class LspClient {
       return await this.connection.sendRequest(CompletionRequest.type, params);
     } catch {
       return null;
+    }
+  }
+
+  async getDefinition(uri: string, position: Position): Promise<Definition | LocationLink[] | null> {
+    try {
+      const params: DefinitionParams = { textDocument: { uri }, position }
+      if (!this.connection) return null
+      return await this.connection.sendRequest(DefinitionRequest.type, params)
+    } catch {
+      return null
+    }
+  }
+
+  async getTypeDefinition(uri: string, position: Position): Promise<Definition | LocationLink[] | null> {
+    try {
+      const params: TypeDefinitionParams = { textDocument: { uri }, position }
+      if (!this.connection) return null
+      return await this.connection.sendRequest(TypeDefinitionRequest.type, params)
+    } catch {
+      return null
+    }
+  }
+
+  async getDeclaration(uri: string, position: Position): Promise<Definition | LocationLink[] | null> {
+    try {
+      const params: DeclarationParams = { textDocument: { uri }, position }
+      if (!this.connection) return null
+      return await this.connection.sendRequest(DeclarationRequest.type, params)
+    } catch {
+      return null
+    }
+  }
+
+  async getImplementation(uri: string, position: Position): Promise<Definition | LocationLink[] | null> {
+    try {
+      const params: ImplementationParams = { textDocument: { uri }, position }
+      if (!this.connection) return null
+      return await this.connection.sendRequest(ImplementationRequest.type, params)
+    } catch {
+      return null
     }
   }
 
