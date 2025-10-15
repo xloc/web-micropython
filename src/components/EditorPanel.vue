@@ -214,8 +214,8 @@ const editorOptions = computed(() => ({
 }))
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
-  editorInstance.value = editor
-  if (!monacoRef.value) return;
+  const monaco = monacoRef.value
+  if (!monaco) return
 
   // Override Monaco's code editor service to handle multi-file navigation
   // Without this, Go to Definition won't work for files not currently open
@@ -229,7 +229,7 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
         // Monaco returned null, meaning it couldn't open the editor
         // This happens when navigating to a different model
         // We need to manually switch to the target model
-        const targetModel = monacoRef.value?.editor.getModel(input.resource)
+        const targetModel = monaco.editor.getModel(input.resource)
         if (targetModel) {
           source.setModel(targetModel)
           source.setSelection(input.options?.selection || {})
@@ -242,14 +242,14 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
   }
 
   // Register .pyi extension as Python (Monaco doesn't recognize it by default)
-  monacoRef.value.languages.register({
+  monaco.languages.register({
     id: 'python',
     extensions: ['.py', '.pyi'],
     aliases: ['Python', 'py'],
   })
 
   // Define custom theme with semantic token coloring rules
-  monacoRef.value.editor.defineTheme('python-dark', {
+  monaco.editor.defineTheme('python-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
@@ -275,44 +275,43 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     ],
     colors: {}
   })
-  monacoRef.value.editor.setTheme('python-dark')
+  monaco.editor.setTheme('python-dark')
+
+  // Ensure workspace is ready
+  if (!workspaceStore.initialized) {
+    await workspaceStore.init()
+  }
+
+  // Initialize LSP without user files (only stubs + config)
+  await lspStore.init()
+  lspStore.attachMonaco(monaco)
+
+  // Create models for all open tabs and open Python files in LSP
+  for (const f of workspaceStore.openTabs) {
+    const uriStr = toUri(f.path)
+    const uri = monaco.Uri.parse(uriStr)
+    let model = monaco.editor.getModel(uri)
+    if (!model) {
+      model = monaco.editor.createModel(f.content, undefined, uri)
+    }
+    // Only send Python files to LSP
+    if (model.getLanguageId() === 'python') {
+      await lspStore.openDocument(model.uri.toString(), model.getValue())
+    }
+  }
 
   // Set initial content from active file if available
   const activeFile = workspaceStore.activeDoc
   if (activeFile) {
-    // Wait for workspace to be initialized
-    if (!workspaceStore.initialized) {
-      await workspaceStore.init()
-    }
-
-    // Initialize LSP without user files (only stubs + config)
-    await lspStore.init()
-    if (monacoRef.value) {
-      lspStore.attachMonaco(monacoRef.value)
-    }
-
-    // Create models for all open tabs and open Python files in LSP
-    for (const f of workspaceStore.openTabs) {
-      const uriStr = toUri(f.path)
-      const uri = (monacoRef.value).Uri.parse(uriStr)
-      let model = (monacoRef.value).editor.getModel(uri)
-      if (!model) {
-        model = (monacoRef.value).editor.createModel(f.content, undefined, uri)
-      }
-      // Only send Python files to LSP
-      if (model.getLanguageId() === 'python') {
-        await lspStore.openDocument(model.uri.toString(), model.getValue())
-      }
-    }
-
-    // Set the active model
     const activeUriStr = toUri(activeFile.path)
-    const activeUri = (monacoRef.value).Uri.parse(activeUriStr)
-    const activeModel = (monacoRef.value).editor.getModel(activeUri)
+    const activeUri = monaco.Uri.parse(activeUriStr)
+    const activeModel = monaco.editor.getModel(activeUri)
     if (activeModel) {
       editor.setModel(activeModel)
     }
   }
+
+  editorInstance.value = editor
 
   // Store-based language service registration happens automatically
 
@@ -322,13 +321,13 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     for (const t of workspaceStore.openTabs) openMap[t.path] = t.content
     const loaded = await loadPythonSnippets(openMap)
     if (snippetDisposable) { try { snippetDisposable.dispose() } catch { } }
-    snippetDisposable = monacoRef.value && registerPythonSnippetProvider(monacoRef.value, loaded)
+    snippetDisposable = registerPythonSnippetProvider(monaco, loaded)
   } catch {
     // ignore snippet init errors
   }
 
   // Add custom keyboard shortcuts
-  const m = monacoRef.value
+  const m = monaco
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyR, runCode)
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyU, uploadCode)
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, saveCurrentFile)

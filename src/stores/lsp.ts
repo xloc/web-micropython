@@ -12,6 +12,7 @@ export const useLspStore = defineStore('lsp', () => {
   const waiting = ref(false)
   const monacoAttached = ref(false)
   const lastError = ref<string | null>(null)
+  let initPromise: Promise<void> | null = null
 
   let monacoInstance: typeof import('monaco-editor') | null = null
 
@@ -21,23 +22,40 @@ export const useLspStore = defineStore('lsp', () => {
   }
 
   const init = async (options?: SessionOptions) => {
-    try {
-      phase.value = 'initializing'
-      lastError.value = null
-      const c = ensureClient()
-      c.requestNotification({
-        onWaitingForInitialization: (w) => (waiting.value = w),
-        onDiagnostics: (uri, diags) => {
-          if (monacoInstance) applyDiagnostics(monacoInstance, uri, diags)
-        },
-      })
-
-      await c.initialize(options)
-      phase.value = monacoAttached.value ? 'ready' : 'providers'
-    } catch (e: any) {
-      lastError.value = e?.message ?? String(e)
-      phase.value = 'error'
+    if ((phase.value === 'ready' || phase.value === 'providers') && !options) {
+      return
     }
+
+    if (initPromise) {
+      await initPromise
+      return
+    }
+
+    phase.value = 'initializing'
+    lastError.value = null
+    const c = ensureClient()
+    c.requestNotification({
+      onWaitingForInitialization: (w) => (waiting.value = w),
+      onDiagnostics: (uri, diags) => {
+        if (monacoInstance) applyDiagnostics(monacoInstance, uri, diags)
+      },
+    })
+
+    const run = (async () => {
+      try {
+        await c.initialize(options)
+        phase.value = monacoAttached.value ? 'ready' : 'providers'
+      } catch (e: any) {
+        lastError.value = e?.message ?? String(e)
+        phase.value = 'error'
+      }
+    })()
+
+    initPromise = run.finally(() => {
+      initPromise = null
+    })
+
+    await initPromise
   }
 
   const attachMonaco = (monaco: typeof import('monaco-editor')) => {
@@ -51,11 +69,13 @@ export const useLspStore = defineStore('lsp', () => {
   // Thin wrappers for client APIs (guard if not ready)
   const hasDocument = (uriOrPath: string) => !!client.value?.hasDocument(uriOrPath)
   const openDocument = async (uriOrPath: string, text: string) => {
-    if (!client.value) return
+    await init()
+    if (!client.value || phase.value === 'error') return
     await client.value.openDocument(uriOrPath, text)
   }
   const changeDocument = async (uriOrPath: string, text: string) => {
-    if (!client.value) return
+    await init()
+    if (!client.value || phase.value === 'error') return
     await client.value.changeDocument(uriOrPath, text)
   }
   const updateSettings = async (options: SessionOptions) => {
@@ -80,4 +100,3 @@ export const useLspStore = defineStore('lsp', () => {
     changeDocument,
   }
 })
-
