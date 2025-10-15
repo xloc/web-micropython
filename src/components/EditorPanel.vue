@@ -181,7 +181,7 @@ const getFileName = (path: string): string => {
 }
 
 const editorOptions = computed(() => ({
-  theme: 'vs-dark',
+  theme: 'python-dark',
   fontSize: 14,
   fontFamily: 'Monaco, "Cascadia Code", "Roboto Mono", monospace',
   minimap: { enabled: false },
@@ -241,6 +241,13 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
     }
   }
 
+  // Register .pyi extension as Python (Monaco doesn't recognize it by default)
+  monacoRef.value.languages.register({
+    id: 'python',
+    extensions: ['.py', '.pyi'],
+    aliases: ['Python', 'py'],
+  })
+
   // Define custom theme with semantic token coloring rules
   monacoRef.value.editor.defineTheme('python-dark', {
     base: 'vs-dark',
@@ -278,30 +285,33 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
       await workspaceStore.init()
     }
 
-    // Initialize LSP with any open files including config
-    const initialFiles: Record<string, string> = {}
-    for (const f of workspaceStore.openTabs) {
-      initialFiles[f.path] = f.content
-    }
-    if (Object.keys(initialFiles).length === 0) {
-      initialFiles[activeFile.path] = activeFile.content
-    }
-    await lspStore.init(initialFiles)
+    // Initialize LSP without user files (only stubs + config)
+    await lspStore.init()
     if (monacoRef.value) {
       lspStore.attachMonaco(monacoRef.value)
     }
 
-    // Ensure a model for the active file with proper URI
-    const uriStr = toUri(activeFile.path)
-    const uri = (monacoRef.value).Uri.parse(uriStr)
-    let model = (monacoRef.value).editor.getModel(uri)
-    if (!model) {
-      model = (monacoRef.value).editor.createModel(activeFile.content, editorStore.language, uri)
-      if (!lspStore.hasDocument(uriStr)) {
-        await lspStore.openDocument(uriStr, activeFile.content)
+    // Create models for all open tabs and open Python files in LSP
+    for (const f of workspaceStore.openTabs) {
+      const uriStr = toUri(f.path)
+      const uri = (monacoRef.value).Uri.parse(uriStr)
+      let model = (monacoRef.value).editor.getModel(uri)
+      if (!model) {
+        model = (monacoRef.value).editor.createModel(f.content, undefined, uri)
+      }
+      // Only send Python files to LSP
+      if (model.getLanguageId() === 'python') {
+        await lspStore.openDocument(model.uri.toString(), model.getValue())
       }
     }
-    editor.setModel(model)
+
+    // Set the active model
+    const activeUriStr = toUri(activeFile.path)
+    const activeUri = (monacoRef.value).Uri.parse(activeUriStr)
+    const activeModel = (monacoRef.value).editor.getModel(activeUri)
+    if (activeModel) {
+      editor.setModel(activeModel)
+    }
   }
 
   // Store-based language service registration happens automatically
@@ -361,10 +371,11 @@ const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
       } else {
         workspaceStore.activePath = path
       }
-      // Ensure LSP knows about this stub file
+      // Ensure LSP knows about this stub file (if it's Python)
       try {
         const uriStr = m.uri.toString()
-        if (!lspStore.hasDocument(uriStr)) {
+        // Only send Python files to LSP
+        if (m.getLanguageId() === 'python') {
           await lspStore.openDocument(uriStr, m.getValue())
         }
       } catch (e) {
@@ -387,10 +398,10 @@ const handleContentChange = (value: string) => {
   // Update file system store with new content
   workspaceStore.updateFileContent(activeFile.path, value)
 
-  // Send change to LSP for current model
+  // Send change to LSP for current model (if it's Python)
   try {
     const model = editorInstance.value?.getModel()
-    if (model) {
+    if (model && model.getLanguageId() === 'python') {
       lspStore.changeDocument(model.uri.toString(), value)
     }
   } catch { }
@@ -450,9 +461,10 @@ watch(
     const uri = (monacoRef.value as any).Uri.parse(uriStr)
     let model = (monacoRef.value as any).editor.getModel(uri)
     if (!model) {
-      model = (monacoRef.value as any).editor.createModel(activeFile.content, editorStore.language, uri)
+      model = (monacoRef.value as any).editor.createModel(activeFile.content, undefined, uri)
       try {
-        if (!lspStore.hasDocument(uriStr)) {
+        // Only send Python files to LSP
+        if (model.getLanguageId() === 'python') {
           await lspStore.openDocument(uriStr, activeFile.content)
         }
       } catch { /* LSP may not be ready; ignore */ }

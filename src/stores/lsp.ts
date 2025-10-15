@@ -20,7 +20,7 @@ export const useLspStore = defineStore('lsp', () => {
     return client.value!
   }
 
-  const init = async (initialFiles: Record<string, string>, options?: SessionOptions) => {
+  const init = async (options?: SessionOptions) => {
     try {
       phase.value = 'initializing'
       lastError.value = null
@@ -32,8 +32,7 @@ export const useLspStore = defineStore('lsp', () => {
         },
       })
 
-      // initialFiles should already contain CONFIG_PATH if needed
-      await c.initialize(options, initialFiles)
+      await c.initialize(options)
       phase.value = monacoAttached.value ? 'ready' : 'providers'
     } catch (e: any) {
       lastError.value = e?.message ?? String(e)
@@ -59,10 +58,9 @@ export const useLspStore = defineStore('lsp', () => {
     if (!client.value) return
     await client.value.changeDocument(uriOrPath, text)
   }
-  const updateSettings = async (options: SessionOptions, initialFiles: Record<string, string>) => {
+  const updateSettings = async (options: SessionOptions) => {
     if (!client.value) return
-    // initialFiles should already contain CONFIG_PATH if needed
-    await client.value.updateSettings(options, initialFiles)
+    await client.value.updateSettings(options)
   }
 
   return {

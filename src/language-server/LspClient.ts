@@ -59,6 +59,7 @@ import {
 import { getPyrightVersions, packageName } from './sessionManager';
 import { loadMicropythonStubs } from './micropythonStubs';
 import type { SessionOptions } from './sessionManager';
+import { createVFS } from '../services/vfs';
 
 const rootPath = '/sync-root/';
 const rootUri = `file://${rootPath}`;
@@ -84,18 +85,11 @@ export class LspClient {
   }
 
   // Initialize the LSP connection and open initial files.
-  public async initialize(sessionOptions?: SessionOptions, initialFiles?: Record<string, string>) {
+  public async initialize(sessionOptions?: SessionOptions) {
     this._notifications.onWaitingForInitialization?.(true);
 
-    // Prime documents from caller or with a default untitled file
+    // Clear documents - they'll be opened via openDocument() after Monaco is ready
     this._documents.clear();
-    const seedFiles = initialFiles && Object.keys(initialFiles).length > 0
-      ? initialFiles
-      : { [`${rootPath}Untitled.py`]: '' };
-    for (const [path, text] of Object.entries(seedFiles)) {
-      const uri = toUri(path);
-      this._documents.set(uri, { uri, text, version: 1 });
-    }
 
     // Build worker URL from CDN (same pattern as playground)
     const version = sessionOptions?.pyrightVersion ?? (await getPyrightVersions())[0];
@@ -146,19 +140,20 @@ export class LspClient {
     const micropythonStubFiles = await loadMicropythonStubs();
 
     const files: Record<string, string> = { ...micropythonStubFiles };
-    // seed open docs
-    for (const doc of this._documents.values()) {
-      files[fromUri(doc.uri)] = doc.text;
-    }
-    // pyright config at /sync-root: prefer provided config text when available
+    // pyright config at /sync-root: load from VFS or use defaults
     const configKey = `${rootPath}pyrightconfig.json`;
-    const providedConfigText = initialFiles?.[configKey];
-    // Start with a minimal default; we'll patch in stubPath/typeshedPath and diagnostics as needed
     let cfgObj: any = { typeshedPath: '/typeshed' };
+
+    // Try to load existing config from VFS
     try {
-      if (providedConfigText) cfgObj = JSON.parse(providedConfigText);
-    } catch {
-      // ignore parse errors and fall back to default
+      const vfs = await createVFS();
+      if (await vfs.exists(configKey)) {
+        const configText = await vfs.readFile(configKey);
+        cfgObj = JSON.parse(configText);
+        console.info('Loaded pyrightconfig.json from VFS');
+      }
+    } catch (e) {
+      console.warn('Failed to load pyrightconfig.json from VFS, using defaults:', e);
     }
 
     // Ensure our stub path is available so /typings is searched.
@@ -225,20 +220,8 @@ export class LspClient {
       }
     );
 
-    // Open seeded files
-    for (const doc of this._documents.values()) {
-      await this.connection.sendNotification(
-        new NotificationType<DidOpenTextDocumentParams>('textDocument/didOpen'),
-        {
-          textDocument: {
-            uri: doc.uri,
-            languageId: 'python',
-            version: doc.version,
-            text: doc.text,
-          },
-        }
-      );
-    }
+    // User files will be opened via openDocument() after Monaco is ready
+    // (no seeding here)
 
     // Diagnostics
     this.connection.onNotification(
@@ -270,14 +253,26 @@ export class LspClient {
     this._notifications.onWaitingForInitialization?.(false);
   }
 
-  async updateSettings(sessionOptions: SessionOptions, initialFiles?: Record<string, string>) {
+  async updateSettings(sessionOptions: SessionOptions) {
+    // Store currently open documents
+    const openDocs = Array.from(this._documents.values());
+
     this.connection?.dispose();
-    await this.initialize(sessionOptions, initialFiles);
+    await this.initialize(sessionOptions);
+
+    // Re-open previously open documents
+    for (const doc of openDocs) {
+      await this.openDocument(doc.uri, doc.text);
+    }
   }
 
   // Document lifecycle
   async openDocument(uriOrPath: string, text: string) {
     const uri = uriOrPath.startsWith('file://') ? uriOrPath : toUri(uriOrPath);
+
+    // Don't re-open if already open (idempotent)
+    if (this._documents.has(uri)) return;
+
     const doc: DocState = { uri, text, version: 1 };
     this._documents.set(uri, doc);
     await this.connection?.sendNotification(

@@ -78,7 +78,7 @@ export function registerMonacoProviders(monaco: typeof import('monaco-editor'), 
     }
 
     try {
-      monaco.editor.createModel(text ?? '', 'python', uri)
+      monaco.editor.createModel(text ?? '', undefined, uri)
     } catch {
       // Ignore model creation failures
     }

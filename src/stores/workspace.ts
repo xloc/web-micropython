@@ -212,16 +212,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       file.isDirty = false
       file.lastSaved = new Date()
 
-      // If pyrightconfig.json was saved, refresh LSP settings with current open docs
+      // If pyrightconfig.json was saved, refresh LSP settings
       if (path === CONFIG_PATH) {
         try {
           const lsp = useLspStore()
-          const initial: Record<string, string> = {}
-          for (const t of openTabs.value) {
-            initial[t.path] = t.content
-          }
-          initial[CONFIG_PATH] = file.content
-          await lsp.updateSettings({}, initial)
+          await lsp.updateSettings({})
         } catch {
           // LSP may not be initialized; ignore
         }
