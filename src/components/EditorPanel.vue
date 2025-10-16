@@ -211,6 +211,7 @@ const editorOptions = computed(() => ({
   'definitionLinkOpensInPeek': false,
   'gotoLocation.multipleDefinitions': 'goto',
   'gotoLocation.multipleDeclarations': 'goto',
+  fixedOverflowWidgets: true,
 }))
 
 const handleEditorMount = async (editor: editor.IStandaloneCodeEditor) => {
