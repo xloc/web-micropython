@@ -28,7 +28,6 @@ export function registerMonacoProviders(monaco: typeof import('monaco-editor'), 
 
     // Listen to content changes and sync to LSP immediately
     const disposable = model.onDidChangeContent(() => {
-      // Send change notification synchronously (don't await - it's fire-and-forget)
       lspClient.changeDocument(uri, model.getValue()).catch((err) => {
         console.warn('[LSP] Failed to sync document change:', err)
       })

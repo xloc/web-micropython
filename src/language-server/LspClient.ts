@@ -351,14 +351,30 @@ export class LspClient {
     }
   }
 
+  private convertMonacoTriggerKindToLsp(monacoTriggerKind: number): CompletionTriggerKind {
+    // CRITICAL: Monaco uses 0-based enum values, LSP uses 1-based
+    // Without this conversion, Monaco's TriggerCharacter(1) gets interpreted as LSP's Invoked(1),
+    // causing BasedPyright to return ALL symbols instead of context-appropriate completions
+    switch (monacoTriggerKind) {
+      case 0: return 1; // Monaco.Invoke → LSP.Invoked(1)
+      case 1: return 2; // Monaco.TriggerCharacter → LSP.TriggerCharacter(2)
+      case 2: return 3; // Monaco.TriggerForIncompleteCompletions → LSP.TriggerForIncompleteCompletions(3)
+      default:
+        console.warn(`[LSP] Unknown Monaco triggerKind: ${monacoTriggerKind}, defaulting to Invoked`);
+        return 1;
+    }
+  }
+
   async getCompletion(uri: string, position: Position, monacoContext?: { triggerKind: number; triggerCharacter?: string }): Promise<CompletionList | CompletionItem[] | null> {
     try {
       const params: CompletionParams = { textDocument: { uri }, position };
 
       // Convert Monaco CompletionContext to LSP CompletionContext
       if (monacoContext) {
+        const lspTriggerKind = this.convertMonacoTriggerKindToLsp(monacoContext.triggerKind);
+
         const lspContext: CompletionContext = {
-          triggerKind: monacoContext.triggerKind as CompletionTriggerKind,
+          triggerKind: lspTriggerKind,
         };
 
         if (monacoContext.triggerCharacter) {
@@ -370,7 +386,8 @@ export class LspClient {
 
       if (!this.connection) return null;
       return await this.connection.sendRequest(CompletionRequest.type, params);
-    } catch {
+    } catch (err) {
+      console.error('[LSP Request] Completion request failed:', err)
       return null;
     }
   }

@@ -165,8 +165,18 @@ export function registerPythonSnippetProvider(
   loaded: LoadedSnippets
 ): monaco.IDisposable {
   return monacoNs.languages.registerCompletionItemProvider('python', {
-    triggerCharacters: ['.', ' ', '\t', '(', '[', '{'],
-    provideCompletionItems: (model, position) => {
+    // Best practice: Snippets should NOT register '.' or '[' as trigger characters
+    // These are "private" to language providers for member/index access contexts
+    // where snippets don't make syntactic sense
+    triggerCharacters: [' ', '\t', '(', '{'],
+    provideCompletionItems: (model, position, context) => {
+      // Suppress snippets in member access or indexing contexts
+      // Even though we removed '.' and '[' from triggerCharacters, the provider
+      // can still be invoked in these contexts (manual Ctrl+Space, etc.)
+      if (context.triggerCharacter === '.' || context.triggerCharacter === '[') {
+        return { suggestions: [] }
+      }
+
       const suggestions = toMonacoCompletions(monacoNs, loaded)
       const word = model.getWordUntilPosition(position)
       const range = new monacoNs.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
