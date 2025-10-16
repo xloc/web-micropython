@@ -7,6 +7,9 @@ import { loadMicropythonStubs } from './micropythonStubs'
 
 let registered = false
 
+// Track disposables for model change listeners
+const modelChangeDisposables = new Map<string, monaco.IDisposable>()
+
 export function registerMonacoProviders(monaco: typeof import('monaco-editor'), lspClient: LspClient) {
   if (registered) return
   registered = true
@@ -14,6 +17,32 @@ export function registerMonacoProviders(monaco: typeof import('monaco-editor'), 
   // Lazily-initialized helpers for fetching file content for target URIs
   let vfsPromise: Promise<Awaited<ReturnType<typeof createVFS>>> | null = null
   let stubFilesPromise: Promise<Record<string, string>> | null = null
+
+  // Automatically sync document changes to LSP on every keystroke
+  monaco.editor.onDidCreateModel((model) => {
+    const uri = model.uri.toString()
+    if (model.getLanguageId() !== 'python') return
+
+    // Dispose previous listener if exists
+    modelChangeDisposables.get(uri)?.dispose()
+
+    // Listen to content changes and sync to LSP immediately
+    const disposable = model.onDidChangeContent(() => {
+      // Send change notification synchronously (don't await - it's fire-and-forget)
+      lspClient.changeDocument(uri, model.getValue()).catch((err) => {
+        console.warn('[LSP] Failed to sync document change:', err)
+      })
+    })
+
+    modelChangeDisposables.set(uri, disposable)
+  })
+
+  // Clean up listener when model is disposed
+  monaco.editor.onWillDisposeModel((model) => {
+    const uri = model.uri.toString()
+    modelChangeDisposables.get(uri)?.dispose()
+    modelChangeDisposables.delete(uri)
+  })
 
   const ensureModelForUri = async (uriStr: string) => {
     const uri = monaco.Uri.parse(uriStr)
@@ -171,9 +200,13 @@ export function registerMonacoProviders(monaco: typeof import('monaco-editor'), 
   // Completion + resolve
   monaco.languages.registerCompletionItemProvider('python', {
     triggerCharacters: ['.', '[', '"', "'"],
-    provideCompletionItems: async (model, position) => {
+    provideCompletionItems: async (model, position, context) => {
       const uri = model.uri.toString()
-      const res = (await lspClient.getCompletion(uri, { line: position.lineNumber - 1, character: position.column - 1 })) as CompletionList
+      const res = (await lspClient.getCompletion(
+        uri,
+        { line: position.lineNumber - 1, character: position.column - 1 },
+        context
+      )) as CompletionList
       if (!res) return null
       return {
         suggestions: res.items.map((i) => convertCompletionItem(monaco, i, model)),
@@ -285,7 +318,7 @@ function convertCompletionItem(monaco: typeof import('monaco-editor'), item: Com
     tags: item.tags as any,
     detail: item.detail,
     documentation: item.documentation as any,
-    sortText: item.sortText,
+    sortText: enhanceSortText(item),
     filterText: item.filterText,
     preselect: item.preselect,
     insertText: (item.label as any) ?? '',
@@ -311,19 +344,93 @@ function convertCompletionItem(monaco: typeof import('monaco-editor'), item: Com
   return converted
 }
 
+function enhanceSortText(item: CompletionItem): string {
+  const label = typeof item.label === 'string' ? item.label : (item.label as any).label
+  const baseSortText = item.sortText || label
+
+  // If BasedPyright provided sortText, use it as base
+  // The format is typically "XX.YYYY.name" where XX is category (00-12)
+  // We'll apply adjustments to demote or promote based on name patterns
+
+  // Demote dunder methods (__init__, __str__, etc.)
+  if (label.startsWith('__') && label.endsWith('__')) {
+    if (item.sortText && /^\d{2}\./.test(item.sortText)) {
+      const match = item.sortText.match(/^(\d{2})\.(.+)$/)
+      if (match) {
+        return `11.${match[2]}`  // 11 = DunderSymbol category
+      }
+    }
+    return `zz.dunder.${baseSortText}`
+  }
+
+  // Demote private/protected members (_foo, _bar)
+  if (label.startsWith('_') && !label.startsWith('__')) {
+    if (item.sortText && /^\d{2}\./.test(item.sortText)) {
+      const match = item.sortText.match(/^(\d{2})\.(.+)$/)
+      if (match) {
+        return `10.${match[2]}`  // 10 = PrivateSymbol category
+      }
+    }
+    return `zy.private.${baseSortText}`
+  }
+
+  // For other items, use the base sortText from BasedPyright
+  return baseSortText
+}
+
 function convertCompletionItemKind(monaco: typeof import('monaco-editor'), kind?: number): monaco.languages.CompletionItemKind {
   switch (kind) {
-    case 21 /* Constant */:
-      return monaco.languages.CompletionItemKind.Constant
-    case 6 /* Variable */:
-      return monaco.languages.CompletionItemKind.Variable
+    case 1 /* Text */:
+      return monaco.languages.CompletionItemKind.Text
+    case 2 /* Method */:
+      return monaco.languages.CompletionItemKind.Method
     case 3 /* Function */:
       return monaco.languages.CompletionItemKind.Function
+    case 4 /* Constructor */:
+      return monaco.languages.CompletionItemKind.Constructor
     case 5 /* Field */:
       return monaco.languages.CompletionItemKind.Field
+    case 6 /* Variable */:
+      return monaco.languages.CompletionItemKind.Variable
+    case 7 /* Class */:
+      return monaco.languages.CompletionItemKind.Class
+    case 8 /* Interface */:
+      return monaco.languages.CompletionItemKind.Interface
+    case 9 /* Module */:
+      return monaco.languages.CompletionItemKind.Module
+    case 10 /* Property */:
+      return monaco.languages.CompletionItemKind.Property
+    case 11 /* Unit */:
+      return monaco.languages.CompletionItemKind.Unit
+    case 12 /* Value */:
+      return monaco.languages.CompletionItemKind.Value
+    case 13 /* Enum */:
+      return monaco.languages.CompletionItemKind.Enum
     case 14 /* Keyword */:
       return monaco.languages.CompletionItemKind.Keyword
-    default:
+    case 15 /* Snippet */:
+      return monaco.languages.CompletionItemKind.Snippet
+    case 16 /* Color */:
+      return monaco.languages.CompletionItemKind.Color
+    case 17 /* File */:
+      return monaco.languages.CompletionItemKind.File
+    case 18 /* Reference */:
       return monaco.languages.CompletionItemKind.Reference
+    case 19 /* Folder */:
+      return monaco.languages.CompletionItemKind.Folder
+    case 20 /* EnumMember */:
+      return monaco.languages.CompletionItemKind.EnumMember
+    case 21 /* Constant */:
+      return monaco.languages.CompletionItemKind.Constant
+    case 22 /* Struct */:
+      return monaco.languages.CompletionItemKind.Struct
+    case 23 /* Event */:
+      return monaco.languages.CompletionItemKind.Event
+    case 24 /* Operator */:
+      return monaco.languages.CompletionItemKind.Operator
+    case 25 /* TypeParameter */:
+      return monaco.languages.CompletionItemKind.TypeParameter
+    default:
+      return monaco.languages.CompletionItemKind.Text
   }
 }

@@ -52,14 +52,14 @@ export function toMonacoCompletions(
   monacoNs: typeof monaco,
   snippets: LoadedSnippets
 ): monaco.languages.CompletionItem[] {
-  return snippets.items.map((s, idx) => ({
+  return snippets.items.map((s) => ({
     label: s.prefix,
     kind: monacoNs.languages.CompletionItemKind.Snippet,
     detail: s.description ?? `Snippet: ${s.name}`,
     documentation: s.description,
     insertText: s.body,
     insertTextRules: monacoNs.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-    sortText: '0_snippet_' + String(idx).padStart(4, '0'),
+    sortText: s.prefix,
     range: undefined as any,
   }))
 }

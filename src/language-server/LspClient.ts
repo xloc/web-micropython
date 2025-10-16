@@ -28,6 +28,8 @@ import type {
   CompletionItem,
   CompletionList,
   CompletionParams,
+  CompletionContext,
+  CompletionTriggerKind,
   Definition,
   DefinitionParams,
   LocationLink,
@@ -349,9 +351,23 @@ export class LspClient {
     }
   }
 
-  async getCompletion(uri: string, position: Position): Promise<CompletionList | CompletionItem[] | null> {
+  async getCompletion(uri: string, position: Position, monacoContext?: { triggerKind: number; triggerCharacter?: string }): Promise<CompletionList | CompletionItem[] | null> {
     try {
       const params: CompletionParams = { textDocument: { uri }, position };
+
+      // Convert Monaco CompletionContext to LSP CompletionContext
+      if (monacoContext) {
+        const lspContext: CompletionContext = {
+          triggerKind: monacoContext.triggerKind as CompletionTriggerKind,
+        };
+
+        if (monacoContext.triggerCharacter) {
+          lspContext.triggerCharacter = monacoContext.triggerCharacter;
+        }
+
+        params.context = lspContext;
+      }
+
       if (!this.connection) return null;
       return await this.connection.sendRequest(CompletionRequest.type, params);
     } catch {
