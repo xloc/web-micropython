@@ -15,12 +15,19 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('monaco-editor') || id.includes('@guolao/vue-monaco-editor')) return 'monaco'
-            if (id.includes('@xterm')) return 'xterm'
-            if (id.includes('vscode-jsonrpc') || id.includes('vscode-languageserver')) return 'vscode-lsp'
-            return 'vendor'
+          if (!id.includes('node_modules')) return
+
+          if (id.includes('monaco-editor')) {
+            if (id.includes('/vs/editor/standalone/')) return 'monaco-standalone'
+            if (id.includes('/vs/platform/')) return 'monaco-platform'
+            if (id.includes('/vs/base/')) return 'monaco-base'
+            return 'monaco-core'
           }
+
+          if (id.includes('@guolao/vue-monaco-editor')) return 'monaco-adapter'
+          if (id.includes('@xterm')) return 'xterm'
+          if (id.includes('vscode-jsonrpc') || id.includes('vscode-languageserver')) return 'vscode-lsp'
+          return 'vendor'
         }
       }
     }

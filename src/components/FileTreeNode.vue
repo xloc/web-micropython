@@ -24,23 +24,6 @@
       </span>
     </div>
 
-    <!-- Context Menu -->
-    <div v-if="showContextMenu" :style="contextMenuStyle"
-      class="fixed bg-white border border-zinc-300 rounded shadow-lg py-1 z-50 min-w-32" @click.stop>
-      <button v-if="!node.readonly" @click="handleRename"
-        class="w-full text-left px-3 py-1 text-sm hover:bg-zinc-100 flex items-center gap-2">
-        ✏️ Rename
-      </button>
-      <button v-if="!node.readonly" @click="handleDelete"
-        class="w-full text-left px-3 py-1 text-sm hover:bg-zinc-100 text-red-600 flex items-center gap-2">
-        🗑️ Delete
-      </button>
-      <div v-if="node.readonly" class="px-3 py-1 text-sm text-zinc-500 flex items-center gap-2">
-        <LockClosedIcon class="size-4" />
-        Read-only
-      </div>
-    </div>
-
     <!-- Children (if directory is expanded) -->
     <div v-if="node.type === 'directory' && node.isExpanded && node.children">
       <FileTreeNode v-for="child in sortedChildren" :key="child.path" :node="child" :level="level + 1"
@@ -50,11 +33,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import { LockClosedIcon } from '@heroicons/vue/16/solid'
 import { useWorkspaceStore } from '../stores/workspace'
 import type { FileNode } from '../stores/workspace'
 import FileIcon from './FileIcon.vue'
+import { StandaloneServices } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneServices'
+import { IContextMenuService } from 'monaco-editor/esm/vs/platform/contextview/browser/contextView'
+import type { IContextMenuService as MonacoContextMenuService } from 'monaco-editor/esm/vs/platform/contextview/browser/contextView'
+import { Action } from 'monaco-editor/esm/vs/base/common/actions'
+import { createVFS } from '../services/vfs'
 
 interface Props {
   node: FileNode
@@ -87,12 +75,7 @@ const sortedChildren = computed(() => {
   })
 })
 
-// Context menu state
-const showContextMenu = ref(false)
-const contextMenuStyle = ref({})
-
 const handleClick = () => {
-  hideContextMenu()
   if (props.node.type === 'file') {
     emit('file-click', props.node)
   } else {
@@ -102,22 +85,23 @@ const handleClick = () => {
 
 const handleRightClick = (event: MouseEvent) => {
   event.preventDefault()
-  showContextMenu.value = true
+  const contextMenuService = getContextMenuService()
+  if (!contextMenuService) return
 
-  // Position context menu at mouse position
-  contextMenuStyle.value = {
-    left: `${event.clientX}px`,
-    top: `${event.clientY}px`
-  }
-}
+  const actions = buildActions()
+  if (actions.length === 0) return
 
-const hideContextMenu = () => {
-  showContextMenu.value = false
+  const anchor = { x: event.clientX, y: event.clientY }
+  const target = event.currentTarget as HTMLElement | null
+
+  contextMenuService.showContextMenu({
+    getAnchor: () => anchor,
+    getActions: () => actions,
+    onHide: () => target?.focus?.()
+  })
 }
 
 const handleRename = async () => {
-  hideContextMenu()
-
   const currentName = props.node.name
   const newName = prompt(`Rename ${props.node.type}:`, currentName)
 
@@ -128,14 +112,12 @@ const handleRename = async () => {
     try {
       await workspaceStore.renameEntry(props.node.path, newPath)
     } catch (error: any) {
-      alert(`Failed to rename: ${error.message}`)
+      console.error('Failed to rename entry:', error)
     }
   }
 }
 
 const handleDelete = async () => {
-  hideContextMenu()
-
   try {
     if (props.node.type === 'directory') {
       await workspaceStore.deleteDirectory(props.node.path)
@@ -143,25 +125,38 @@ const handleDelete = async () => {
       await workspaceStore.deleteFile(props.node.path)
     }
   } catch (error: any) {
-    alert(`Failed to delete: ${error.message}`)
+    console.error('Failed to delete entry:', error)
   }
 }
 
-// Close context menu when clicking outside
-const handleClickOutside = () => {
-  if (showContextMenu.value) {
-    hideContextMenu()
+const handleDownload = async () => {
+  if (props.node.type !== 'file') return
+
+  try {
+    const content = await getFileContent(props.node.path)
+    const blob = new Blob([content], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = props.node.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  } catch (error: any) {
+    console.error('Failed to download file:', error)
   }
 }
 
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
-
+const handleCopyPath = async () => {
+  try {
+    await navigator.clipboard.writeText(props.node.path)
+  } catch (error) {
+    console.error('Failed to copy path:', error)
+  }
+}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B'
@@ -171,5 +166,98 @@ const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+const getContextMenuService = (): MonacoContextMenuService | null => {
+  try {
+    return StandaloneServices.get<MonacoContextMenuService>(IContextMenuService)
+  } catch (error) {
+    console.warn('[Explorer] Monaco context menu unavailable:', error)
+    return null
+  }
+}
+
+const buildActions = () => {
+  const actions: Action[] = []
+
+  if (props.node.type === 'file') {
+    actions.push(
+      new Action(
+        'explorer.download',
+        'Download',
+        undefined,
+        true,
+        async () => {
+          await handleDownload()
+        }
+      )
+    )
+  }
+
+  if (!props.node.readonly) {
+    actions.push(
+      new Action(
+        'explorer.rename',
+        'Rename',
+        undefined,
+        true,
+        async () => {
+          await handleRename()
+        }
+      ),
+      new Action(
+        'explorer.delete',
+        'Delete',
+        undefined,
+        true,
+        async () => {
+          await handleDelete()
+        }
+      )
+    )
+  } else {
+    actions.push(
+      new Action(
+        'explorer.readonly',
+        'Read-only',
+        undefined,
+        false,
+        async () => { }
+      )
+    )
+  }
+
+  actions.push(
+    new Action(
+      'explorer.copyPath',
+      'Copy Path',
+      undefined,
+      true,
+      async () => {
+        await handleCopyPath()
+      }
+    )
+  )
+
+  return actions
+}
+
+let vfsPromise: Promise<Awaited<ReturnType<typeof createVFS>>> | null = null
+
+const getVfs = () => {
+  if (!vfsPromise) {
+    vfsPromise = createVFS()
+  }
+  return vfsPromise
+}
+
+const getFileContent = async (path: string) => {
+  const openTab = workspaceStore.openTabs.find(tab => tab.path === path)
+  if (openTab) {
+    return openTab.content
+  }
+
+  const vfs = await getVfs()
+  return vfs.readFile(path)
 }
 </script>
