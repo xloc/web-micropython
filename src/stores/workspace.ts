@@ -4,6 +4,7 @@ import { useLocalStorage } from '@vueuse/core'
 import { useLspStore } from './lsp'
 import { CONFIG_PATH, defaultConfig } from '../services/pyrightConfig'
 import { createVFS, type VFS, type VFSFile } from '../services/vfs'
+import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 
 export interface FileNode {
   name: string
@@ -65,6 +66,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return node
   }
 
+  const EXPORT_ROOT_DIR = 'workspace'
+
   // Sync open tab paths to localStorage
   watch(
     () => openTabs.value.map(t => t.path),
@@ -116,6 +119,110 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       console.error('Failed to initialize VFS:', e)
       throw e
     }
+  }
+
+  const ensureVfsReady = async (): Promise<VFS> => {
+    if (!vfs) await init()
+    if (!vfs) throw new Error('VFS not initialized')
+    return vfs
+  }
+
+  const collectWritableEntries = async (fs: VFS) => {
+    const files: string[] = []
+    const directories = new Set<string>()
+    const stack: string[] = ['/']
+
+    while (stack.length > 0) {
+      const current = stack.pop()!
+      let entries: VFSFile[]
+      try {
+        entries = await fs.readdir(current)
+      } catch {
+        continue
+      }
+
+      for (const entry of entries) {
+        if (entry.readonly) continue
+        if (entry.type === 'file') {
+          files.push(entry.path)
+        } else if (entry.type === 'directory') {
+          directories.add(entry.path)
+          stack.push(entry.path)
+        }
+      }
+    }
+
+    files.sort((a, b) => a.localeCompare(b))
+    const sortedDirectories = Array.from(directories).sort((a, b) => a.localeCompare(b))
+
+    return { files, directories: sortedDirectories }
+  }
+
+  const normalizeZipEntryPath = (entry: string): string | null => {
+    if (!entry) return null
+    const withoutBackslashes = entry.replace(/\\/g, '/')
+    const trimmed = withoutBackslashes.replace(/^\/+/, '')
+    if (!trimmed) return null
+    const parts = trimmed.split('/')
+    const resolved: string[] = []
+
+    for (const part of parts) {
+      if (!part || part === '.') continue
+      if (part === '..') {
+        if (resolved.length === 0) return null
+        resolved.pop()
+        continue
+      }
+      resolved.push(part)
+    }
+
+    if (resolved.length === 0) return null
+    return resolved.join('/')
+  }
+
+  const stripExportRoot = (entry: string): string | null => {
+    if (!entry) return null
+    const segments = entry.split('/').filter(Boolean)
+    if (segments.length === 0) return null
+    if (segments[0] !== EXPORT_ROOT_DIR) return entry
+    if (segments.length === 1) return null
+    return segments.slice(1).join('/')
+  }
+
+  const parentDirectoriesFor = (path: string): string[] => {
+    const segments = path.split('/').filter(Boolean)
+    const dirs: string[] = []
+    let current = ''
+    for (let i = 0; i < segments.length - 1; i += 1) {
+      current += `/${segments[i]}`
+      dirs.push(current)
+    }
+    return dirs
+  }
+
+  const readArchiveBytes = async (input: Blob | ArrayBuffer | Uint8Array): Promise<Uint8Array> => {
+    if (input instanceof Uint8Array) return input
+    if (input instanceof ArrayBuffer) return new Uint8Array(input)
+    if (input instanceof Blob) {
+      const buffer = await input.arrayBuffer()
+      return new Uint8Array(buffer)
+    }
+    throw new Error('Unsupported archive input type')
+  }
+
+  const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+    const { buffer, byteOffset, byteLength } = bytes
+
+    if (typeof ArrayBuffer !== 'undefined' && buffer instanceof ArrayBuffer) {
+      if (byteOffset === 0 && byteLength === buffer.byteLength) {
+        return buffer
+      }
+      return buffer.slice(byteOffset, byteOffset + byteLength)
+    }
+
+    const copy = new Uint8Array(byteLength)
+    copy.set(bytes)
+    return copy.buffer
   }
 
   // Actions
@@ -347,6 +454,130 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  const dumpZip = async (): Promise<Blob> => {
+    try {
+      const fs = await ensureVfsReady()
+      const { files, directories } = await collectWritableEntries(fs)
+      const archiveEntries: Record<string, Uint8Array> = {}
+      const rootPrefix = `${EXPORT_ROOT_DIR}/`
+
+      // Ensure root folder is present so unzip keeps everything contained
+      archiveEntries[rootPrefix] = new Uint8Array(0)
+
+      for (const dirPath of directories) {
+        const relative = dirPath.replace(/^\//, '')
+        if (!relative) continue
+        const normalized = relative.replace(/\/+$/, '')
+        if (!normalized) continue
+        const key = `${rootPrefix}${normalized}/`
+        archiveEntries[key] = new Uint8Array(0)
+      }
+
+      const fileContents = await Promise.all(
+        files.map(async (path) => ({
+          path,
+          data: strToU8(await fs.readFile(path)),
+        }))
+      )
+
+      for (const { path, data } of fileContents) {
+        const relative = path.replace(/^\//, '')
+        if (!relative) continue
+        archiveEntries[`${rootPrefix}${relative}`] = data
+      }
+
+      const zipped = zipSync(archiveEntries, { level: 6 })
+      return new Blob([toArrayBuffer(zipped)], { type: 'application/zip' })
+    } catch (e: any) {
+      const message = e?.message ?? String(e)
+      error.value = `Failed to export workspace: ${message}`
+      console.error('Failed to export workspace:', e)
+      throw e
+    }
+  }
+
+  const loadZip = async (archive: Blob | ArrayBuffer | Uint8Array) => {
+    try {
+      const fs = await ensureVfsReady()
+      const bytes = await readArchiveBytes(archive)
+      let unpacked: Record<string, Uint8Array>
+
+      try {
+        unpacked = unzipSync(bytes)
+      } catch (e: any) {
+        throw new Error(`Invalid archive: ${e?.message ?? String(e)}`)
+      }
+
+      const directoriesToEnsure = new Set<string>()
+      const filesToWrite: Array<{ path: string; content: string }> = []
+
+      for (const rawPath of Object.keys(unpacked)) {
+        const normalized = normalizeZipEntryPath(rawPath)
+        if (!normalized) continue
+
+        const stripped = stripExportRoot(normalized)
+        if (!stripped) continue
+
+        const absolutePath = `/${stripped}`
+        const isDirectory = rawPath.endsWith('/')
+
+        if (isDirectory) {
+          if (!fs.isReadOnly(absolutePath)) {
+            directoriesToEnsure.add(absolutePath)
+          }
+          continue
+        }
+
+        if (fs.isReadOnly(absolutePath)) {
+          continue
+        }
+
+        for (const dir of parentDirectoriesFor(absolutePath)) {
+          if (!fs.isReadOnly(dir)) {
+            directoriesToEnsure.add(dir)
+          }
+        }
+
+        const content = strFromU8(unpacked[rawPath])
+        filesToWrite.push({ path: absolutePath, content })
+      }
+
+      // Ensure directories exist before writing files
+      const orderedDirectories = Array.from(directoriesToEnsure).sort((a, b) => a.localeCompare(b))
+      for (const dir of orderedDirectories) {
+        if (!dir || dir === '/') continue
+        try {
+          await fs.mkdir(dir)
+        } catch {
+          // Directory may already exist; ignore
+        }
+      }
+
+      const importedContent = new Map<string, string>()
+      for (const file of filesToWrite.sort((a, b) => a.path.localeCompare(b.path))) {
+        await fs.writeFile(file.path, file.content)
+        importedContent.set(file.path, file.content)
+      }
+
+      // Refresh existing open tabs that were overwritten
+      for (const tab of openTabs.value) {
+        const updatedContent = importedContent.get(tab.path)
+        if (updatedContent != null && !tab.readonly) {
+          tab.content = updatedContent
+          tab.isDirty = false
+          tab.lastSaved = new Date()
+        }
+      }
+
+      await loadFileTree()
+    } catch (e: any) {
+      const message = e?.message ?? String(e)
+      error.value = `Failed to import workspace: ${message}`
+      console.error('Failed to import workspace:', e)
+      throw e
+    }
+  }
+
   const clearError = () => {
     error.value = null
   }
@@ -377,6 +608,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     deleteFile,
     deleteDirectory,
     renameEntry,
+    dumpZip,
+    loadZip,
     clearError
   }
 })

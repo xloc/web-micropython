@@ -12,11 +12,18 @@
       <!-- Header -->
       <div class="flex items-center justify-between px-3 h-10 bg-zinc-800">
         <h3 class="text-sm font-medium text-gray-400">Explorer</h3>
-        <button @click="syncProject" :disabled="!serialStore.isConnected || syncStore.isSyncing"
-          class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
-          title="Sync to Device">
-          <ArrowUpTrayIcon class="size-4" />
-        </button>
+        <div class="flex items-center gap-1">
+          <button @click="syncProject" :disabled="!serialStore.isConnected || syncStore.isSyncing"
+            class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
+            title="Sync to Device">
+            <ArrowUpTrayIcon class="size-4" />
+          </button>
+          <button @click="openExplorerMenu"
+            class="p-1.5 hover:bg-zinc-700 rounded text-gray-400 hover:text-white transition-colors"
+            title="Workspace menu">
+            <EllipsisHorizontalIcon class="size-4" />
+          </button>
+        </div>
       </div>
 
       <!-- SYNC-ROOT section -->
@@ -80,12 +87,16 @@
 
 <script setup lang="ts">
 import { watch, computed } from 'vue'
-import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
+import { ArrowPathIcon, ArrowUpTrayIcon, DocumentPlusIcon, FolderPlusIcon, ChevronRightIcon, ChevronDownIcon, EllipsisHorizontalIcon } from '@heroicons/vue/16/solid'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useSerialStore } from '../stores/serial'
 import { useSyncStore } from '../stores/sync'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/workspace'
+import { StandaloneServices } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneServices'
+import { IContextMenuService } from 'monaco-editor/esm/vs/platform/contextview/browser/contextView'
+import type { IContextMenuService as MonacoContextMenuService } from 'monaco-editor/esm/vs/platform/contextview/browser/contextView'
+import { Action } from 'monaco-editor/esm/vs/base/common/actions'
 
 const workspaceStore = useWorkspaceStore()
 const serialStore = useSerialStore()
@@ -199,5 +210,118 @@ const createNewFolder = async () => {
 
 const syncProject = async () => {
   await syncStore.syncProject()
+}
+
+const openExplorerMenu = (event: MouseEvent) => {
+  const contextMenuService = getContextMenuService()
+  if (!contextMenuService) return
+
+  const actions = buildExplorerMenuActions()
+  if (actions.length === 0) return
+
+  const button = event.currentTarget as HTMLElement | null
+  const rect = button?.getBoundingClientRect()
+  const anchor = rect
+    ? { x: rect.left + rect.width / 2, y: rect.bottom }
+    : { x: event.clientX, y: event.clientY }
+
+  contextMenuService.showContextMenu({
+    getAnchor: () => anchor,
+    getActions: () => actions,
+    onHide: () => button?.focus?.()
+  })
+}
+
+const buildExplorerMenuActions = () => {
+  return [
+    new Action(
+      'workspace.importZip',
+      'Import Zip…',
+      undefined,
+      true,
+      async () => {
+        await handleImportWorkspace()
+      }
+    ),
+    new Action(
+      'workspace.exportZip',
+      'Export Zip',
+      undefined,
+      true,
+      async () => {
+        await handleExportWorkspace()
+      }
+    )
+  ]
+}
+
+const handleImportWorkspace = async () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.zip,application/zip'
+  input.style.display = 'none'
+
+  const cleanup = () => {
+    input.value = ''
+    input.remove()
+    window.removeEventListener('focus', handleWindowFocus)
+  }
+
+  const handleWindowFocus = () => {
+    // Give the file dialog a moment to update the input state before cleanup
+    window.setTimeout(() => {
+      if (!input.files || input.files.length === 0) {
+        cleanup()
+      }
+    }, 0)
+  }
+
+  input.addEventListener(
+    'change',
+    async () => {
+      const file = input.files?.[0]
+      cleanup()
+
+      if (!file) return
+
+      try {
+        await workspaceStore.loadZip(file)
+      } catch (error) {
+        console.error('Failed to import workspace zip:', error)
+      }
+    },
+    { once: true }
+  )
+
+  window.addEventListener('focus', handleWindowFocus, { once: true })
+  document.body.appendChild(input)
+  input.click()
+}
+
+const handleExportWorkspace = async () => {
+  try {
+    const blob = await workspaceStore.dumpZip()
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'workspace.zip'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Failed to export workspace zip:', error)
+  }
+}
+
+const getContextMenuService = (): MonacoContextMenuService | null => {
+  try {
+    return StandaloneServices.get<MonacoContextMenuService>(IContextMenuService)
+  } catch (error) {
+    console.warn('[Explorer] Monaco context menu unavailable:', error)
+    return null
+  }
 }
 </script>
