@@ -86,7 +86,6 @@ import { useSerialStore } from '../stores/serial'
 import { useSyncStore } from '../stores/sync'
 import FileTreeNode from './FileTreeNode.vue'
 import type { FileNode } from '../stores/workspace'
-import { getAllFiles } from '../utils/fileTree'
 
 const workspaceStore = useWorkspaceStore()
 const serialStore = useSerialStore()
@@ -98,8 +97,8 @@ const rootChildren = computed(() => workspaceStore.fileTree?.children || [])
 // Sync-root node and its children/files
 const syncRootNode = computed(() => rootChildren.value.find(n => n.path === '/sync-root'))
 const syncRootFilesFlat = computed((): FileNode[] => {
-  if (!syncRootNode.value) return []
-  return getAllFiles(syncRootNode.value)
+  if (!syncRootNode.value || !syncRootNode.value.children) return []
+  return syncRootNode.value.children
 })
 
 // All other top-level nodes (e.g., stubs, snippets, ...)
@@ -113,7 +112,10 @@ const showOther = vueRef(true)
 
 // Sorting helpers for top-level entries to match directory-first alphabetical
 const sortedSyncRootFiles = computed(() => {
-  return [...syncRootFilesFlat.value].sort((a, b) => a.name.localeCompare(b.name))
+  return [...syncRootFilesFlat.value].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
 })
 const sortedOtherNodes = computed(() => {
   return [...otherNodes.value].sort((a, b) => {
