@@ -10,16 +10,15 @@
 
     <template v-else>
       <!-- Header -->
-      <div class="flex items-center justify-between px-3 h-10 bg-zinc-800">
+      <div class="flex items-center justify-between pl-3 pr-1 h-10 bg-zinc-800">
         <h3 class="text-sm font-medium text-gray-400">Explorer</h3>
         <div class="flex items-center gap-1">
           <button @click="syncProject" :disabled="!serialStore.isConnected || syncStore.isSyncing"
-            class="p-1.5 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-400 hover:text-white transition-colors"
+            class="p-1.5 rounded text-gray-400 hover:bg-zinc-700 transition-colors disabled:text-gray-600 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             title="Sync to Device">
             <ArrowUpTrayIcon class="size-4" />
           </button>
-          <button @click="openExplorerMenu"
-            class="p-1.5 hover:bg-zinc-700 rounded text-gray-400 hover:text-white transition-colors"
+          <button @click="openExplorerMenu" class="p-1.5 rounded text-gray-400 hover:bg-zinc-700 transition-colors"
             title="Workspace menu">
             <EllipsisHorizontalIcon class="size-4" />
           </button>
@@ -29,20 +28,20 @@
       <!-- SYNC-ROOT section -->
       <div class="bg-zinc-800 text-zinc-400 flex flex-col h-full">
         <!-- Sync Root header row with actions on the right -->
-        <div class="flex items-center justify-between px-1 h-6 flex-none group">
-          <button class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide select-none"
-            @click="showSyncRoot = !showSyncRoot" title="Toggle sync-root section">
+        <div class="flex items-center justify-between px-1 h-6 flex-none group cursor-pointer"
+          title="Toggle sync-root section" @click="toggleSyncRoot">
+          <div class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide select-none">
             <component :is="showSyncRoot ? ChevronDownIcon : ChevronRightIcon" class="size-4" />
             <span>Sync Root</span>
-          </button>
+          </div>
           <div class="flex gap-0.5 invisible group-hover:visible">
-            <button @click="createNewFile" class="p-1 hover:bg-zinc-700" title="New File">
+            <button @click.stop="createNewFile" class="p-1 hover:bg-zinc-700" title="New File">
               <DocumentPlusIcon class="size-4" />
             </button>
-            <button @click="createNewFolder" class="p-1 hover:bg-zinc-700" title="New Folder">
+            <button @click.stop="createNewFolder" class="p-1 hover:bg-zinc-700" title="New Folder">
               <FolderPlusIcon class="size-4" />
             </button>
-            <button @click="refreshFileTree" class="p-1 hover:bg-zinc-700" title="Refresh">
+            <button @click.stop="refreshFileTree" class="p-1 hover:bg-zinc-700" title="Refresh">
               <ArrowPathIcon class="size-4" />
             </button>
           </div>
@@ -58,12 +57,12 @@
         </div>
 
         <!-- Other header row (no actions) -->
-        <div class="flex items-center justify-between px-1 h-6 border-t border-zinc-600 flex-none">
-          <button class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide select-none"
-            @click="showOther = !showOther" title="Toggle other section">
+        <div class="flex items-center justify-between px-1 h-6 border-t border-zinc-600 flex-none cursor-pointer"
+          title="Toggle other section" @click="toggleOther">
+          <div class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide select-none">
             <component :is="showOther ? ChevronDownIcon : ChevronRightIcon" class="size-4" />
             <span>Other</span>
-          </button>
+          </div>
           <div class="w-6" />
         </div>
 
@@ -176,6 +175,14 @@ watch(
 
 // Kick off VFS initialization on mount
 workspaceStore.init()
+
+const toggleSyncRoot = () => {
+  showSyncRoot.value = !showSyncRoot.value
+}
+
+const toggleOther = () => {
+  showOther.value = !showOther.value
+}
 
 const handleFileClick = async (node: FileNode) => {
   if (node.type === 'file') {

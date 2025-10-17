@@ -192,7 +192,7 @@ const editorOptions = computed(() => ({
   glyphMargin: false,
   folding: true,
   lineDecorationsWidth: 0,
-  lineNumbersMinChars: 3,
+  lineNumbersMinChars: 4,
   renderLineHighlight: 'line' as const,
   contextmenu: true,
   selectOnLineNumbers: true,
