@@ -22,6 +22,28 @@ export interface LoadedSnippets {
 // Default public snippet path (read-only)
 const PUBLIC_SNIPPETS_DIR = '/snippets'
 
+// Build-time discovered snippet assets for fallback loading
+const publicSnippetAssets = import.meta.glob('../assets/snippets/**/*.json', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+
+const asAbsoluteUrl = (maybeRelative: string): string => {
+  try {
+    return new URL(maybeRelative, import.meta.url).href
+  } catch {
+    return maybeRelative
+  }
+}
+
+const resolvePublicSnippetUrl = (vfsPath: string): string | null => {
+  const relative = vfsPath.replace(`${PUBLIC_SNIPPETS_DIR}/`, '')
+  const globKey = `../assets/snippets/${relative}`
+  const asset = publicSnippetAssets[globKey]
+  return typeof asset === 'string' ? asAbsoluteUrl(asset) : null
+}
+
 // Supported user snippet file paths (first existing wins)
 const USER_SNIPPET_CANDIDATES = [
   '/sync-root/.vscode/python.code-snippets',
@@ -99,19 +121,22 @@ export async function loadPythonSnippets(userOpenFiles?: Record<string, string>)
         }
       }
     } else {
-      // Fallback: fetch the main python.json
-      const res = await fetch(PUBLIC_SNIPPETS_DIR + '/python.json')
-      if (res.ok) {
-        const text = await res.text()
-        const map = parseSnippetJson(text)
-        for (const [name, def] of Object.entries(map)) {
-          const prefixes = normalizePrefix(def.prefix)
-          const body = normalizeBody(def.body)
-          for (const p of prefixes) {
-            result.items.push({ name, prefix: p, body, description: def.description })
+      // Fallback: fetch the main python.json via bundled asset URL
+      const assetUrl = resolvePublicSnippetUrl(`${PUBLIC_SNIPPETS_DIR}/python.json`)
+      if (assetUrl) {
+        const res = await fetch(assetUrl)
+        if (res.ok) {
+          const text = await res.text()
+          const map = parseSnippetJson(text)
+          for (const [name, def] of Object.entries(map)) {
+            const prefixes = normalizePrefix(def.prefix)
+            const body = normalizeBody(def.body)
+            for (const p of prefixes) {
+              result.items.push({ name, prefix: p, body, description: def.description })
+            }
           }
+          result.sourcePaths.push(PUBLIC_SNIPPETS_DIR + '/python.json')
         }
-        result.sourcePaths.push(PUBLIC_SNIPPETS_DIR + '/python.json')
       }
     }
   } catch {

@@ -4,11 +4,24 @@
 // requiring any files in the user's /sync-root workspace.
 
 // Vite's import.meta.glob auto-discovers stubs and provides fetchable URLs
-const stubUrls = import.meta.glob('/src/assets/micropython-stubs/**/*.pyi', {
+const stubUrls = import.meta.glob('../assets/micropython-stubs/**/*.pyi', {
   eager: true,
   query: '?url',
   import: 'default',
 })
+
+const asAbsoluteUrl = (maybeRelative: string): string => {
+  try {
+    return new URL(maybeRelative, import.meta.url).href
+  } catch {
+    return maybeRelative
+  }
+}
+
+const toStubRelativePath = (globPath: string): string | null => {
+  const match = globPath.match(/micropython-stubs\/(.+)$/)
+  return match ? match[1] : null
+}
 
 export async function loadMicropythonStubs(): Promise<Record<string, string>> {
   try {
@@ -16,13 +29,12 @@ export async function loadMicropythonStubs(): Promise<Record<string, string>> {
 
     const entries = await Promise.all(
       Object.entries(stubUrls).map(async ([globPath, url]) => {
+        const relPath = toStubRelativePath(globPath)
+        if (!relPath) return null
         try {
-          const r = await fetch(url as string);
+          const r = await fetch(asAbsoluteUrl(url as string));
           if (!r.ok) return null;
           const text = await r.text();
-          // Convert glob path to VFS path
-          // /src/assets/micropython-stubs/machine.pyi -> /typings/machine.pyi
-          const relPath = globPath.replace('/src/assets/micropython-stubs/', '');
           const vfsPath = `/typings/${relPath}`;
           return [vfsPath, text] as const;
         } catch {

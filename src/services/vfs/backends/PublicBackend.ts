@@ -6,53 +6,73 @@
 import type { VFSBackend, VFSFile, VFSStats } from '../types'
 
 // Vite's import.meta.glob discovers assets from src/assets at build time
-const stubFiles = import.meta.glob('/src/assets/micropython-stubs/**/*.pyi', {
+const stubFiles = import.meta.glob('../assets/micropython-stubs/**/*.pyi', {
   eager: true,
   query: '?url',
   import: 'default',
 })
-const snippetFiles = import.meta.glob('/src/assets/snippets/**/*', {
+const snippetFiles = import.meta.glob('../assets/snippets/**/*', {
   eager: true,
   query: '?url',
   import: 'default',
 })
 
+const asAbsoluteUrl = (maybeRelative: string): string => {
+  try {
+    return new URL(maybeRelative, import.meta.url).href
+  } catch {
+    return maybeRelative
+  }
+}
+
+const extractRelativeFromAssets = (globPath: string, anchor: string): string | null => {
+  const match = globPath.match(new RegExp(`${anchor}/(.+)$`))
+  return match ? match[1] : null
+}
+
 export class PublicBackend implements VFSBackend {
   private fileList: Set<string>
   private dirList: Set<string>
+  private assetUrlMap: Map<string, string>
 
   constructor() {
     // Build file and directory lists from glob results
     this.fileList = new Set<string>()
     this.dirList = new Set<string>()
+    this.assetUrlMap = new Map<string, string>()
 
     // Convert stub glob paths to VFS paths
-    // /src/assets/micropython-stubs/machine.pyi -> /stubs/machine.pyi
-    for (const globPath of Object.keys(stubFiles)) {
-      const vfsPath = globPath.replace('/src/assets/micropython-stubs', '/stubs')
-      this.fileList.add(vfsPath)
-      const parts = vfsPath.split('/').filter(Boolean)
-      for (let i = 1; i < parts.length; i++) {
-        const dirPath = '/' + parts.slice(0, i).join('/')
-        this.dirList.add(dirPath)
-      }
+    // ../assets/micropython-stubs/machine.pyi -> /stubs/machine.pyi
+    for (const [globPath, assetUrl] of Object.entries(stubFiles)) {
+      const rel = extractRelativeFromAssets(globPath, 'micropython-stubs')
+      if (!rel) continue
+      const vfsPath = `/stubs/${rel}`
+      this.assetUrlMap.set(vfsPath, asAbsoluteUrl(assetUrl as string))
+      this.addFileAndParents(vfsPath)
     }
 
     // Convert snippet glob paths to VFS paths
-    // /src/assets/snippets/python.json -> /snippets/python.json
-    for (const globPath of Object.keys(snippetFiles)) {
-      const vfsPath = globPath.replace('/src/assets', '')
-      this.fileList.add(vfsPath)
-      const parts = vfsPath.split('/').filter(Boolean)
-      for (let i = 1; i < parts.length; i++) {
-        const dirPath = '/' + parts.slice(0, i).join('/')
-        this.dirList.add(dirPath)
-      }
+    // ../assets/snippets/python.json -> /snippets/python.json
+    for (const [globPath, assetUrl] of Object.entries(snippetFiles)) {
+      const rel = extractRelativeFromAssets(globPath, 'snippets')
+      if (!rel) continue
+      const vfsPath = `/snippets/${rel}`
+      this.assetUrlMap.set(vfsPath, asAbsoluteUrl(assetUrl as string))
+      this.addFileAndParents(vfsPath)
     }
 
     // Ensure top-level directories are registered
     this.dirList.add('/stubs')
     this.dirList.add('/snippets')
+  }
+
+  private addFileAndParents(vfsPath: string) {
+    this.fileList.add(vfsPath)
+    const parts = vfsPath.split('/').filter(Boolean)
+    for (let i = 1; i < parts.length; i++) {
+      const dirPath = '/' + parts.slice(0, i).join('/')
+      this.dirList.add(dirPath)
+    }
   }
 
   isReadOnly(): boolean {
@@ -64,18 +84,7 @@ export class PublicBackend implements VFSBackend {
   }
 
   private getAssetUrl(path: string): string | null {
-    // Convert VFS path back to glob path to look up the URL
-    // /stubs/machine.pyi -> /src/assets/micropython-stubs/machine.pyi
-    if (path.startsWith('/stubs/')) {
-      const globPath = path.replace('/stubs', '/src/assets/micropython-stubs')
-      return stubFiles[globPath] as string || null
-    }
-    // /snippets/python.json -> /src/assets/snippets/python.json
-    if (path.startsWith('/snippets/')) {
-      const globPath = `/src/assets${path}`
-      return snippetFiles[globPath] as string || null
-    }
-    return null
+    return this.assetUrlMap.get(path) ?? null
   }
 
   async exists(path: string): Promise<boolean> {
